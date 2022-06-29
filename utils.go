@@ -1,9 +1,12 @@
 package main
 
 import (
-	"github.com/joho/godotenv"
 	"log"
 	"os"
+	"strings"
+
+	// "github.com/RocketChat/Rocket.Chat.Go.SDK/models"
+	"github.com/joho/godotenv"
 )
 
 type Credentials struct {
@@ -39,4 +42,32 @@ func getUserCredentails() *Credentials {
 func getServerUrl() string {
 	DEV_SERVER_URL := goDotEnvVariable("DEV_SERVER_URL")
 	return DEV_SERVER_URL
+}
+
+func getStringFirstLetter(str string) string {
+	letter := "U"
+	if len(str) > 0 {
+		letter = strings.ToUpper(string(str[0:1]))
+	}
+	return letter
+}
+
+// func findPositionSubscriptionList(subscriptionList []models.ChannelSubscription, value models.ChannelSubscription) int {
+// 	for p, v := range subscriptionList {
+// 		if v.RoomId == value.RoomId {
+// 			return p
+// 		}
+// 	}
+// 	return -1
+// }
+
+func PrintToLogFile(v ...interface{}) {
+	f, err := os.OpenFile("logs.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	if err != nil {
+		log.Fatalf("error opening file: %v", err)
+	}
+	defer f.Close()
+
+	log.SetOutput(f)
+	log.Println(v)
 }
