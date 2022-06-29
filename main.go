@@ -1,9 +1,12 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
+
+	// "strings"
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -19,28 +22,65 @@ import (
 	"golang.org/x/term"
 )
 
-type item models.ChannelSubscription
+var messageList []models.Message
 
-func (i item) FilterValue() string { return i.Name }
+type channelsItem models.ChannelSubscription
 
-type itemDelegate struct{}
+func (i channelsItem) FilterValue() string { return i.Name }
 
-func (d itemDelegate) Height() int                               { return 1 }
-func (d itemDelegate) Spacing() int                              { return 0 }
-func (d itemDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd { return nil }
-func (d itemDelegate) Render(w io.Writer, m list.Model, index int, listItem list.Item) {
-	i, ok := listItem.(item)
+type messagessItem models.Message
+
+func (i messagessItem) FilterValue() string { return i.Timestamp.String() }
+
+type messageListDelegate struct{}
+
+func (d messageListDelegate) Height() int  { return 1 }
+func (d messageListDelegate) Spacing() int { return 0 }
+func (d messageListDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+	return nil
+}
+func (d messageListDelegate) Render(w io.Writer, m list.Model, index int, messageListItem list.Item) {
+	i, ok := messageListItem.(messagessItem)
 	if !ok {
 		return
 	}
+	nameLetterChat := nameLetterBoxStyle.Copy().Width(3).Render(getStringFirstLetter(i.User.Name))
+
+	userFullName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).PaddingRight(1).Bold(true).Align(lipgloss.Left).Render("Sitaram Rathi")
+	userName := lipgloss.NewStyle().Foreground(lipgloss.Color("#767373")).PaddingRight(1).Bold(true).Align(lipgloss.Left).Render("@" + i.User.UserName)
+	timeStamp := lipgloss.NewStyle().Foreground(lipgloss.Color("#767373")).Align(lipgloss.Left).Render(i.Timestamp.Format("15:04"))
+	userDetails := lipgloss.JoinHorizontal(lipgloss.Left, userFullName, userName, timeStamp)
+
+	userMessage := lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#ffffff")).MaxWidth(80).Width(80).Render(i.Msg)
+	messageBox := lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinVertical(lipgloss.Top, userDetails, userMessage))
+	userMessageBox := lipgloss.NewStyle().PaddingBottom(1).Width(80).Render(lipgloss.JoinHorizontal(lipgloss.Left, nameLetterChat, messageBox))
+	// messageString = userMessageBox
+	// messageString += userMessageBox + "\n"
+	// fmt.Println(userMessageBox)
+
+	fmt.Fprintf(w, userMessageBox)
 
 	// str := fmt.Sprintf("%d. %s", index+1, i)
+}
+
+type channelListDelegate struct{}
+
+func (d channelListDelegate) Height() int  { return 1 }
+func (d channelListDelegate) Spacing() int { return 0 }
+func (d channelListDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+	return nil
+}
+func (d channelListDelegate) Render(w io.Writer, m list.Model, index int, channelListItem list.Item) {
+	i, ok := channelListItem.(channelsItem)
+	if !ok {
+		return
+	}
 	if i.Name != "" {
-		nameLetter := sidebarTopColumnStyle.Align(lipgloss.Left).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render(strings.ToUpper(string(i.Name[0:1]))))
+		nameLetter := sidebarTopColumnStyle.Align(lipgloss.Left).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render(getStringFirstLetter(i.Name)))
 		channelName := channelNameStyle.Copy().Bold(false).Render("# " + string(i.Name))
 
 		if index == m.Index() {
-			nameLetter = sidebarTopColumnStyle.Align(lipgloss.Left).Bold(true).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render(strings.ToUpper(string(i.Name[0:1]))))
+			nameLetter = sidebarTopColumnStyle.Align(lipgloss.Left).Bold(true).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render(getStringFirstLetter(i.Name)))
 			channelName = channelNameStyle.Copy().Bold(true).Underline(true).Render("# " + string(i.Name))
 		}
 		str := channelWindowTitleStyle.Copy().PaddingBottom(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, nameLetter, channelName))
@@ -62,10 +102,12 @@ type Model struct {
 	email            string
 	password         string
 
-	channelList list.Model
-	choice      string
+	channelList  list.Model
+	messagesList list.Model
+	choice       string
 
 	loadChannels bool
+	typing       bool
 
 	width  int
 	height int
@@ -84,15 +126,19 @@ func main() {
 	t.Focus()
 
 	items := []list.Item{}
-	l := list.New(items, itemDelegate{}, w/4-1, 14)
+	l := list.New(items, channelListDelegate{}, w/4-1, 14)
+	msgs := list.New(items, messageListDelegate{}, 3*w/4-10, 16)
 
 	initialModel := &Model{
-		channelList: l,
-		textInput:   t,
-		width:       w,
-		height:      h,
-		email:       credentials.email,
-		password:    credentials.pass,
+		channelList:  l,
+		messagesList: msgs,
+		textInput:    t,
+		width:        w,
+		height:       h,
+		subscribed:   make(map[string]string),
+		email:        credentials.email,
+		password:     credentials.pass,
+		msgChannel:   make(chan models.Message, 100),
 	}
 	err = tea.NewProgram(initialModel, tea.WithAltScreen()).Start()
 
@@ -104,46 +150,73 @@ func main() {
 }
 
 func (m *Model) Init() tea.Cmd {
-	go m.connect()
-	return textinput.Blink
+	m.connect()
+	go m.handleMessageStream()
+
+	var cmds []tea.Cmd
+	channelCmd := m.setChannelsInUiList()
+
+	cmds = append(cmds, channelCmd, textinput.Blink)
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
+
 		case "enter":
-			i, ok := m.channelList.SelectedItem().(item)
-			if ok {
-				m.choice = string(i.DisplayName)
+			if !m.typing {
+				m.typing = true
+				m, messagesCmd := m.changeAndPopulateChannelMessages()
+				bs, _ := json.Marshal(messageList)
+				PrintToLogFile(string(bs))
+				return m, messagesCmd
 			}
-			return m, tea.Quit
+
+			if m.typing {
+				msg := strings.TrimSpace(m.textInput.Value())
+				if msg != "" {
+					m.sendMessage(msg)
+					m.textInput.Reset()
+
+					m, messagesCmd := m.changeAndPopulateChannelMessages()
+					bs, _ := json.Marshal(messageList)
+					PrintToLogFile(string(bs))
+					return m, messagesCmd
+				} else {
+					m.textInput.Reset()
+				}
+			}
+
+		case "ctrl+left":
+			m.typing = false
+			return m, nil
 		}
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
 		m.width = msg.Width
-
 		return m, nil
 	}
 
-	if m.loadChannels {
-		var items []list.Item
-		for _, sub := range m.subscriptionList {
-			if sub.Open && sub.Name != "" {
-				items = append(items, item(sub))
-			}
-		}
-		cmd := m.channelList.SetItems(items)
-		m.loadChannels = false
+	if m.typing {
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
 		return m, cmd
 	}
 
-	var cmd tea.Cmd
-	m.channelList, cmd = m.channelList.Update(msg)
-	return m, cmd
+	var channelCmd tea.Cmd
+	m.channelList, channelCmd = m.channelList.Update(msg)
+
+	var messageCmd tea.Cmd
+	m.messagesList, messageCmd = m.messagesList.Update(msg)
+
+	cmds = append(cmds, channelCmd, messageCmd)
+	return m, tea.Batch(cmds...)
 }
 
 func (m *Model) View() string {
@@ -154,6 +227,12 @@ func (m *Model) View() string {
 	m.channelList.Styles.Title = titleStyle.Width(m.width/4 - 1)
 	m.channelList.Styles.PaginationStyle = paginationStyle
 	m.channelList.Styles.HelpStyle = helpStyle
+
+	m.messagesList.SetShowTitle(false)
+	m.messagesList.SetShowStatusBar(false)
+	m.messagesList.SetFilteringEnabled(false)
+	m.messagesList.SetShowHelp(false)
+	m.messagesList.SetShowPagination(false)
 
 	nameLetter := sidebarTopColumnStyle.Width(m.width / 8).Align(lipgloss.Left).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render("S"))
 	newChannelButton := sidebarTopColumnStyle.Width(m.width / 8).Align(lipgloss.Right).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render("✍."))
@@ -169,14 +248,18 @@ func (m *Model) View() string {
 
 	channelTopbarNameLetterBox := nameLetterBoxStyle.Background(lipgloss.Color("#edae49")).Bold(true).Render("R")
 	channelName := channelNameStyle.Render("# Rocket.Chat Terminal TUI")
+
+	if m.activeChannel.Name != "" && m.activeChannel.Open {
+		channelTopbarNameLetterBox = nameLetterBoxStyle.Background(lipgloss.Color("#edae49")).Bold(true).Render(getStringFirstLetter(m.activeChannel.Name))
+		channelName = channelNameStyle.Render("# " + m.activeChannel.Name)
+	}
 	starIcon := starIconStyle.Render("☆")
 
 	channelWindowTitle := channelWindowTitleStyle.Width((3 * m.width / 8) - 2).Render(lipgloss.JoinHorizontal(lipgloss.Top, channelTopbarNameLetterBox, channelName, starIcon))
 	channelOptionsButton := channelOptionsButtonStyle.Width((3 * m.width / 8)).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render("⠇"))
 	channelWindowTopbar := channelWindowTopbarStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center, channelWindowTitle, channelOptionsButton))
 
-	channelConversationScreen := lipgloss.NewStyle().Height(m.height - 7).Render("Here comes messages")
-
+	channelConversationScreen := lipgloss.NewStyle().Height(m.height - 7).Render(m.messagesList.View())
 	messageEmojiIcon := messageEmojiIconStyle.Render("☺")
 	channelMessageInputBox := channelMessageInputBoxStyle.Width((3 * m.width / 4) - 4).Render(lipgloss.JoinHorizontal(lipgloss.Top, messageEmojiIcon, m.textInput.View()))
 

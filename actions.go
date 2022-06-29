@@ -2,13 +2,15 @@ package main
 
 import (
 	// "encoding/json"
-	"fmt"
 	"log"
 	"net/url"
+
+	"github.com/charmbracelet/bubbles/list"
 
 	"github.com/RocketChat/Rocket.Chat.Go.SDK/models"
 	"github.com/RocketChat/Rocket.Chat.Go.SDK/realtime"
 	"github.com/RocketChat/Rocket.Chat.Go.SDK/rest"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func (m *Model) connect() error {
@@ -42,12 +44,9 @@ func (m *Model) connect() error {
 	}
 
 	// log.Println("BINGO!\nYou are In....")
-	m.msgChannel = make(chan models.Message, 100)
-
 	m.getSubscriptions()
 
-	m.handleMessageStream()
-
+	// m.handleMessageStream()
 	return nil
 }
 
@@ -55,6 +54,7 @@ func (m *Model) changeSelectedChannel(index int) {
 	m.activeChannel = m.subscriptionList[index]
 
 	m.messageHistory = []models.Message{}
+	messageList = []models.Message{}
 
 	if _, ok := m.subscribed[m.activeChannel.RoomId]; !ok {
 		if err := m.rlClient.SubscribeToMessageStream(&models.Channel{ID: m.activeChannel.RoomId}, m.msgChannel); err != nil {
@@ -64,7 +64,6 @@ func (m *Model) changeSelectedChannel(index int) {
 		m.subscribed[m.activeChannel.RoomId] = m.activeChannel.RoomId
 	}
 
-	fmt.Println(m.subscribed)
 	m.loadHistory()
 }
 
@@ -84,7 +83,7 @@ func (m *Model) handleMessageStream() {
 		if text == "" {
 			text = message.Text
 		}
-
+		messageList = append(messageList, message)
 		// line := fmt.Sprintf("%s <%s> %s", message.Timestamp.Format("15:04"), message.User.UserName, text)
 		// log.Println(line)
 	}
@@ -116,6 +115,7 @@ func (m *Model) loadHistory() {
 
 	for _, message := range messages {
 		m.msgChannel <- message
+		messageList = append(messageList, message)
 	}
 
 }
@@ -138,4 +138,34 @@ func (m *Model) getSubscriptions() {
 
 	// bs, _ := json.Marshal(m.subscriptionList)
 	// log.Println(string(bs))
+}
+
+func (m *Model) changeAndPopulateChannelMessages() (tea.Model, tea.Cmd) {
+	selectedChannelIndex := m.channelList.Index()
+	m.changeSelectedChannel(selectedChannelIndex)
+	var msgItems []list.Item
+	for _, msg := range messageList {
+		msgItems = append(msgItems, messagessItem(msg))
+	}
+	messagesCmd := m.messagesList.SetItems(msgItems)
+	for !m.messagesList.Paginator.OnLastPage() {
+		m.messagesList.Paginator.NextPage()
+	}
+
+	// fmt.Println(m.messageHistory)
+	return m, messagesCmd
+}
+
+func (m *Model) setChannelsInUiList() tea.Cmd {
+	var items []list.Item
+	for _, sub := range m.subscriptionList {
+		if sub.Open && sub.Name != "" {
+			items = append(items, channelsItem(sub))
+		}
+	}
+	PrintToLogFile(m.messageHistory)
+	channelCmd := m.channelList.SetItems(items)
+	m.loadChannels = false
+	m.activeChannel = m.subscriptionList[0]
+	return channelCmd
 }
