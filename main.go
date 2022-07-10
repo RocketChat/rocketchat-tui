@@ -1,7 +1,7 @@
 package main
 
 import (
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -105,6 +105,10 @@ type Model struct {
 	channelList  list.Model
 	messagesList list.Model
 	choice       string
+	loginScreen  LoginScreen
+
+	updateMessageStream    bool
+	updateMessageStreamCmd tea.Cmd
 
 	loadChannels bool
 	typing       bool
@@ -113,13 +117,45 @@ type Model struct {
 	height int
 }
 
-func main() {
+type LoginScreen struct {
+	emailInput       textinput.Model
+	passwordInput    textinput.Model
+	authTokenInput   textinput.Model
+	activeElement    int
+	loginScreenState string
+	loggedIn         bool
+	clickLoginButton bool
+}
+
+func IntialModelState() *Model {
 	w, h, err := term.GetSize(0)
 	if err != nil {
-		return
+		return nil
 	}
 
-	credentials := getUserCredentails()
+	// credentials := getUserCredentails()
+
+	e := textinput.NewModel()
+	e.Placeholder = "Enter your email"
+	e.Focus()
+
+	p := textinput.NewModel()
+	p.Placeholder = "Enter your password"
+	p.Focus()
+
+	at := textinput.NewModel()
+	at.Placeholder = "Enter your auth token"
+	at.Focus()
+
+	intialLoginScreen := &LoginScreen{
+		emailInput:       e,
+		passwordInput:    p,
+		authTokenInput:   at,
+		activeElement:    1,
+		loginScreenState: "emailTyping",
+		loggedIn:         false,
+		clickLoginButton: false,
+	}
 
 	t := textinput.NewModel()
 	t.Placeholder = "Message"
@@ -130,17 +166,24 @@ func main() {
 	msgs := list.New(items, messageListDelegate{}, 3*w/4-10, 16)
 
 	initialModel := &Model{
-		channelList:  l,
-		messagesList: msgs,
-		textInput:    t,
-		width:        w,
-		height:       h,
-		subscribed:   make(map[string]string),
-		email:        credentials.email,
-		password:     credentials.pass,
-		msgChannel:   make(chan models.Message, 100),
+		channelList:            l,
+		messagesList:           msgs,
+		loginScreen:            *intialLoginScreen,
+		textInput:              t,
+		width:                  w,
+		height:                 h,
+		subscribed:             make(map[string]string),
+		msgChannel:             make(chan models.Message, 100),
+		updateMessageStreamCmd: nil,
 	}
-	err = tea.NewProgram(initialModel, tea.WithAltScreen()).Start()
+	return initialModel
+}
+
+func main() {
+
+	initialModel := IntialModelState()
+
+	err := tea.NewProgram(initialModel, tea.WithAltScreen()).Start()
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -150,31 +193,85 @@ func main() {
 }
 
 func (m *Model) Init() tea.Cmd {
-	m.connect()
-	go m.handleMessageStream()
-
-	var cmds []tea.Cmd
-	channelCmd := m.setChannelsInUiList()
-
-	cmds = append(cmds, channelCmd, textinput.Blink)
-	return tea.Batch(cmds...)
+	return nil
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
+	if !m.loginScreen.loggedIn {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "tab", "ctrl+down":
+				if m.loginScreen.activeElement < 4 {
+					m.loginScreen.activeElement = m.loginScreen.activeElement + 1
+				} else {
+					m.loginScreen.activeElement = 1
+				}
+			case "enter":
+				if m.loginScreen.activeElement == 4 {
+					fmt.Println("Login Using Auth Token")
+				} else {
+					m.loginScreen.activeElement = 3
+					if m.email != "" && m.password != "" {
+						// fmt.Println("Login User")
+						err := m.connect()
+						if err != nil {
+							os.Exit(1)
+						}
+						go m.handleMessageStream()
+
+						var cmds []tea.Cmd
+						channelCmd := m.setChannelsInUiList()
+
+						cmds = append(cmds, channelCmd, textinput.Blink)
+						m.loginScreen.loggedIn = true
+						return m, tea.Batch(cmds...)
+					}
+				}
+			}
+
+		}
+
+		if m.loginScreen.activeElement == 1 {
+			var cmd tea.Cmd
+			m.loginScreen.emailInput, cmd = m.loginScreen.emailInput.Update(msg)
+			m.email = m.loginScreen.emailInput.Value()
+			return m, cmd
+		}
+
+		if m.loginScreen.activeElement == 2 {
+			var cmd tea.Cmd
+			m.loginScreen.passwordInput, cmd = m.loginScreen.passwordInput.Update(msg)
+			m.password = m.loginScreen.passwordInput.Value()
+			return m, cmd
+		}
+	}
+
+	// PrintToLogFile("MESSAGES STREAM", messageList)
+	// PrintToLogFile("MESSAGE LIST", m.messagesList.Items())
+
+	if m.updateMessageStreamCmd != nil {
+		cmd := m.updateMessageStreamCmd
+		m.updateMessageStreamCmd = nil
+		return m, cmd
+	}
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c":
 			return m, tea.Quit
 
 		case "enter":
 			if !m.typing {
 				m.typing = true
 				m, messagesCmd := m.changeAndPopulateChannelMessages()
-				bs, _ := json.Marshal(messageList)
-				PrintToLogFile(string(bs))
+				// bs, _ := json.Marshal(messageList)
+				// PrintToLogFile(string(bs))
 				return m, messagesCmd
 			}
 
@@ -184,10 +281,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.sendMessage(msg)
 					m.textInput.Reset()
 
-					m, messagesCmd := m.changeAndPopulateChannelMessages()
-					bs, _ := json.Marshal(messageList)
-					PrintToLogFile(string(bs))
-					return m, messagesCmd
+					// m, messagesCmd := m.changeAndPopulateChannelMessages()
+					// bs, _ := json.Marshal(messageList)
+					// PrintToLogFile(string(bs))
+					return m, nil
 				} else {
 					m.textInput.Reset()
 				}
@@ -196,6 +293,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+left":
 			m.typing = false
 			return m, nil
+
+		case "ctrl+l", "ctrl+L":
+			m.handleUserLogOut()
+
 		}
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
@@ -209,6 +310,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, cmd
 	}
 
+	// if m.loadMessages {
+	// 	m.loadMessages = false
+	// 	var messageCmd tea.Cmd
+	// 	m.messagesList, messageCmd = m.messagesList.Update(msg)
+	// 	return m, messageCmd
+	// }
+
 	var channelCmd tea.Cmd
 	m.channelList, channelCmd = m.channelList.Update(msg)
 
@@ -220,57 +328,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) View() string {
-	m.channelList.Title = "CHANNELS"
-	m.channelList.SetShowStatusBar(false)
-	m.channelList.SetFilteringEnabled(false)
-	m.channelList.SetShowHelp(false)
-	m.channelList.Styles.Title = titleStyle.Width(m.width/4 - 1)
-	m.channelList.Styles.PaginationStyle = paginationStyle
-	m.channelList.Styles.HelpStyle = helpStyle
 
-	m.messagesList.SetShowTitle(false)
-	m.messagesList.SetShowStatusBar(false)
-	m.messagesList.SetFilteringEnabled(false)
-	m.messagesList.SetShowHelp(false)
-	m.messagesList.SetShowPagination(false)
-
-	nameLetter := sidebarTopColumnStyle.Width(m.width / 8).Align(lipgloss.Left).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render("S"))
-	newChannelButton := sidebarTopColumnStyle.Width(m.width / 8).Align(lipgloss.Right).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render("✍."))
-
-	sidebarTopbar := sidebarTopbarStyle.Render(lipgloss.JoinHorizontal(lipgloss.Top, nameLetter, newChannelButton))
-	sidebarListBox := lipgloss.NewStyle().Height(m.height - 5).Render(m.channelList.View())
-	rocketChatIcon := rocketChatIconStyle.Render("rocket.chat")
-
-	sidebar := lipgloss.Place(m.width/4, m.height-2,
-		lipgloss.Left, lipgloss.Top,
-		sidebarStyle.Height(m.height-2).Width(m.width/4).Render(lipgloss.JoinVertical(lipgloss.Top, sidebarTopbar, sidebarListBox, rocketChatIcon)),
-	)
-
-	channelTopbarNameLetterBox := nameLetterBoxStyle.Background(lipgloss.Color("#edae49")).Bold(true).Render("R")
-	channelName := channelNameStyle.Render("# Rocket.Chat Terminal TUI")
-
-	if m.activeChannel.Name != "" && m.activeChannel.Open {
-		channelTopbarNameLetterBox = nameLetterBoxStyle.Background(lipgloss.Color("#edae49")).Bold(true).Render(getStringFirstLetter(m.activeChannel.Name))
-		channelName = channelNameStyle.Render("# " + m.activeChannel.Name)
+	var completeUi string
+	if m.loginScreen.loggedIn {
+		completeUi = m.RenderTui()
+	} else {
+		completeUi = m.RenderLoginScreen()
 	}
-	starIcon := starIconStyle.Render("☆")
 
-	channelWindowTitle := channelWindowTitleStyle.Width((3 * m.width / 8) - 2).Render(lipgloss.JoinHorizontal(lipgloss.Top, channelTopbarNameLetterBox, channelName, starIcon))
-	channelOptionsButton := channelOptionsButtonStyle.Width((3 * m.width / 8)).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render("⠇"))
-	channelWindowTopbar := channelWindowTopbarStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center, channelWindowTitle, channelOptionsButton))
-
-	channelConversationScreen := lipgloss.NewStyle().Height(m.height - 7).Render(m.messagesList.View())
-	messageEmojiIcon := messageEmojiIconStyle.Render("☺")
-	channelMessageInputBox := channelMessageInputBoxStyle.Width((3 * m.width / 4) - 4).Render(lipgloss.JoinHorizontal(lipgloss.Top, messageEmojiIcon, m.textInput.View()))
-
-	channelWindow := lipgloss.Place(3*(m.width/4)-2, m.height-2,
-		lipgloss.Left, lipgloss.Top,
-		channelWindowStyle.Height(m.height-2).Width(3*(m.width/4)).Render(lipgloss.JoinVertical(lipgloss.Top, channelWindowTopbar, channelConversationScreen, channelMessageInputBox)),
-	)
-
-	instruction := instructionStyle.Width(m.width).Render("Press Ctrl + C - quit • Ctrl + H - help • Arrows - for navigation in pane • Enter - send message")
-	ui := lipgloss.JoinHorizontal(lipgloss.Center, sidebar, channelWindow)
-	completeUi := lipgloss.JoinVertical(lipgloss.Center, instruction, ui)
 	dialog := lipgloss.Place(m.width, m.height,
 		lipgloss.Center, lipgloss.Center,
 		dialogStyle.Render(completeUi),

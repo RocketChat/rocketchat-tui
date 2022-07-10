@@ -29,7 +29,7 @@ func (m *Model) connect() error {
 
 	m.rlClient = c
 
-	_, err = c.Login(&models.UserCredentials{Email: m.email, Password: m.password})
+	_, err = m.rlClient.Login(&models.UserCredentials{Email: m.email, Password: m.password})
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,6 @@ func (m *Model) connect() error {
 	c2 := rest.NewClient(serverUrl, false)
 
 	m.restClient = c2
-
 	if err := m.restClient.Login(&models.UserCredentials{Email: m.email, Password: m.password}); err != nil {
 		log.Println("failed to login")
 		return err
@@ -68,6 +67,7 @@ func (m *Model) changeSelectedChannel(index int) {
 }
 
 func (m *Model) handleMessageStream() {
+	m.updateMessageStream = false
 
 	for {
 		message := <-m.msgChannel
@@ -77,15 +77,22 @@ func (m *Model) handleMessageStream() {
 		}
 
 		m.messageHistory = append(m.messageHistory, message)
-
-		text := message.Msg
-
-		if text == "" {
-			text = message.Text
-		}
 		messageList = append(messageList, message)
 		// line := fmt.Sprintf("%s <%s> %s", message.Timestamp.Format("15:04"), message.User.UserName, text)
 		// log.Println(line)
+		// m.loadMessages = true
+		// PrintToLogFile("MESSAGE", message)
+		// PrintToLogFile("MESSAGES STREAM", messageList)
+		// PrintToLogFile("MESSAGE LIST", m.messagesList.Items())
+
+		if len(messageList) != len(m.messagesList.Items()) {
+			var msgItems []list.Item
+			for _, msg := range messageList {
+				msgItems = append(msgItems, messagessItem(msg))
+			}
+			m.updateMessageStreamCmd = m.messagesList.SetItems(msgItems)
+		}
+
 	}
 }
 
@@ -115,7 +122,7 @@ func (m *Model) loadHistory() {
 
 	for _, message := range messages {
 		m.msgChannel <- message
-		messageList = append(messageList, message)
+		// messageList = append(messageList, message)
 	}
 
 }
@@ -143,6 +150,7 @@ func (m *Model) getSubscriptions() {
 func (m *Model) changeAndPopulateChannelMessages() (tea.Model, tea.Cmd) {
 	selectedChannelIndex := m.channelList.Index()
 	m.changeSelectedChannel(selectedChannelIndex)
+	PrintToLogFile("changeAndPopulateChannelMessages", m.messageHistory)
 	var msgItems []list.Item
 	for _, msg := range messageList {
 		msgItems = append(msgItems, messagessItem(msg))
@@ -163,9 +171,18 @@ func (m *Model) setChannelsInUiList() tea.Cmd {
 			items = append(items, channelsItem(sub))
 		}
 	}
-	PrintToLogFile(m.messageHistory)
+	// PrintToLogFile(m.messageHistory)
 	channelCmd := m.channelList.SetItems(items)
 	m.loadChannels = false
 	m.activeChannel = m.subscriptionList[0]
 	return channelCmd
+}
+
+func (m *Model) handleUserLogOut() {
+	m = IntialModelState()
+	m.loginScreen.loggedIn = false
+	m.loginScreen.passwordInput.Reset()
+	m.loginScreen.emailInput.Reset()
+	m.email = ""
+	m.password = ""
 }
