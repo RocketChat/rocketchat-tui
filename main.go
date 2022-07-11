@@ -99,13 +99,16 @@ type Model struct {
 	subscribed       map[string]string
 	messageHistory   []models.Message
 	activeChannel    models.ChannelSubscription
-	email            string
-	password         string
+
+	email    string
+	password string
+	token    string
+	userId   string
 
 	channelList  list.Model
 	messagesList list.Model
 	choice       string
-	loginScreen  LoginScreen
+	loginScreen  *LoginScreen
 
 	updateMessageStream    bool
 	updateMessageStreamCmd tea.Cmd
@@ -152,8 +155,8 @@ func IntialModelState() *Model {
 		passwordInput:    p,
 		authTokenInput:   at,
 		activeElement:    1,
-		loginScreenState: "emailTyping",
 		loggedIn:         false,
+		loginScreenState: "showLoginScreen",
 		clickLoginButton: false,
 	}
 
@@ -168,7 +171,7 @@ func IntialModelState() *Model {
 	initialModel := &Model{
 		channelList:            l,
 		messagesList:           msgs,
-		loginScreen:            *intialLoginScreen,
+		loginScreen:            intialLoginScreen,
 		textInput:              t,
 		width:                  w,
 		height:                 h,
@@ -193,13 +196,20 @@ func main() {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return nil
+	err := CacheInit()
+	if err != nil {
+		fmt.Println(err)
+		os.Exit(1)
+	}
+
+	cmd := m.userLoginBegin()
+	return cmd
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	if !m.loginScreen.loggedIn {
+	if !m.loginScreen.loggedIn && m.loginScreen.loginScreenState == "showLoginScreen" {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			switch msg.String() {
@@ -218,7 +228,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.loginScreen.activeElement = 3
 					if m.email != "" && m.password != "" {
 						// fmt.Println("Login User")
-						err := m.connect()
+						err := m.connectFromEmailAndPassword()
 						if err != nil {
 							os.Exit(1)
 						}
@@ -229,6 +239,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 						cmds = append(cmds, channelCmd, textinput.Blink)
 						m.loginScreen.loggedIn = true
+
 						return m, tea.Batch(cmds...)
 					}
 				}
@@ -295,7 +306,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 
 		case "ctrl+l", "ctrl+L":
-			m.handleUserLogOut()
+			m, cmd := m.handleUserLogOut()
+			return m, cmd
 
 		}
 	case tea.WindowSizeMsg:

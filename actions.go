@@ -4,6 +4,8 @@ import (
 	// "encoding/json"
 	"log"
 	"net/url"
+	"os"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 
@@ -13,7 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m *Model) connect() error {
+func (m *Model) connectFromEmailAndPassword() error {
 
 	sUrl := getServerUrl()
 	serverUrl, err := url.Parse(sUrl)
@@ -29,7 +31,7 @@ func (m *Model) connect() error {
 
 	m.rlClient = c
 
-	_, err = m.rlClient.Login(&models.UserCredentials{Email: m.email, Password: m.password})
+	user, err := m.rlClient.Login(&models.UserCredentials{Email: m.email, Password: m.password})
 	if err != nil {
 		return err
 	}
@@ -42,11 +44,95 @@ func (m *Model) connect() error {
 		return err
 	}
 
+	m.token = user.Token
+	m.userId = user.ID
+	CreateUpdateCacheEntry("token", user.Token)
+	CreateUpdateCacheEntry("userId", user.ID)
+	CreateUpdateCacheEntry("tokenGeneratedTime", time.Now().Format(time.RFC3339))
+
+	m.loginScreen.loggedIn = true
+	m.loginScreen.loginScreenState = "showTui"
+
+	PrintToLogFile(user)
+
 	// log.Println("BINGO!\nYou are In....")
 	m.getSubscriptions()
 
 	// m.handleMessageStream()
 	return nil
+}
+
+func (m *Model) connectFromTokenAndUserId() error {
+
+	sUrl := getServerUrl()
+	serverUrl, err := url.Parse(sUrl)
+	if err != nil {
+		return err
+	}
+
+	c, err := realtime.NewClient(serverUrl, false)
+	if err != nil {
+		log.Println("Failed to connect", err)
+		return err
+	}
+
+	m.rlClient = c
+
+	_, err = m.rlClient.Login(&models.UserCredentials{ID: m.userId, Token: m.token})
+	if err != nil {
+		return err
+	}
+
+	c2 := rest.NewClient(serverUrl, false)
+
+	m.restClient = c2
+	if err := m.restClient.Login(&models.UserCredentials{ID: m.userId, Token: m.token}); err != nil {
+		log.Println("failed to login")
+		return err
+	}
+	m.loginScreen.loggedIn = true
+	m.loginScreen.loginScreenState = "showTui"
+
+	// log.Println("BINGO!\nYou are In....")
+	m.getSubscriptions()
+
+	// m.handleMessageStream()
+	return nil
+}
+
+func (m *Model) userLoginBegin() tea.Cmd {
+	token, err := GetCacheEntry("token")
+	if err != nil {
+		PrintToLogFile(err)
+		m.loginScreen.loginScreenState = "showLoginScreen"
+		m.loginScreen.loggedIn = false
+		return nil
+	}
+	userId, _ := GetCacheEntry("userId")
+	tokenGeneratedTime, _ := GetCacheEntry("tokenGeneratedTime")
+
+	tokenValid := CheckForTokenExpiration(tokenGeneratedTime)
+	if tokenValid {
+		m.token = token
+		m.userId = userId
+		err := m.connectFromTokenAndUserId()
+		if err != nil {
+			os.Exit(1)
+		}
+		go m.handleMessageStream()
+
+		channelCmd := m.setChannelsInUiList()
+		return channelCmd
+
+	} else {
+		CreateUpdateCacheEntry("token", "")
+		CreateUpdateCacheEntry("userId", "")
+		CreateUpdateCacheEntry("tokenGeneratedTime", "")
+		m.loginScreen.loginScreenState = "showLoginScreen"
+		m.loginScreen.loggedIn = false
+		return nil
+	}
+
 }
 
 func (m *Model) changeSelectedChannel(index int) {
@@ -178,11 +264,18 @@ func (m *Model) setChannelsInUiList() tea.Cmd {
 	return channelCmd
 }
 
-func (m *Model) handleUserLogOut() {
+func (m *Model) handleUserLogOut() (tea.Model, tea.Cmd) {
 	m = IntialModelState()
-	m.loginScreen.loggedIn = false
 	m.loginScreen.passwordInput.Reset()
 	m.loginScreen.emailInput.Reset()
 	m.email = ""
 	m.password = ""
+	m.token = ""
+	m.userId = ""
+	m.loginScreen.loginScreenState = "showLoginScreen"
+	m.loginScreen.loggedIn = false
+	CreateUpdateCacheEntry("token", "")
+	CreateUpdateCacheEntry("userId", "")
+	CreateUpdateCacheEntry("tokenGeneratedTime", "")
+	return m, nil
 }

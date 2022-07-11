@@ -4,6 +4,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	// "github.com/RocketChat/Rocket.Chat.Go.SDK/models"
 	"github.com/joho/godotenv"
@@ -70,4 +71,11 @@ func PrintToLogFile(v ...interface{}) {
 
 	log.SetOutput(f)
 	log.Println(v)
+}
+
+func CheckForTokenExpiration(tokenGeneratedTime string) bool {
+	tgt, _ := time.Parse(time.RFC3339, tokenGeneratedTime)
+	tgtAdd24Hrs := tgt.AddDate(0, 0, 1)
+	currentTime := time.Now()
+	return tgt.Before(currentTime) && tgtAdd24Hrs.After(currentTime)
 }
