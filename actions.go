@@ -45,9 +45,7 @@ func (m *Model) connectFromEmailAndPassword() error {
 	}
 
 	m.token = user.Token
-	m.userId = user.ID
 	CreateUpdateCacheEntry("token", user.Token)
-	CreateUpdateCacheEntry("userId", user.ID)
 	CreateUpdateCacheEntry("tokenGeneratedTime", time.Now().Format(time.RFC3339))
 
 	m.loginScreen.loggedIn = true
@@ -62,7 +60,7 @@ func (m *Model) connectFromEmailAndPassword() error {
 	return nil
 }
 
-func (m *Model) connectFromTokenAndUserId() error {
+func (m *Model) connectFromToken() error {
 
 	sUrl := getServerUrl()
 	serverUrl, err := url.Parse(sUrl)
@@ -78,7 +76,7 @@ func (m *Model) connectFromTokenAndUserId() error {
 
 	m.rlClient = c
 
-	_, err = m.rlClient.Login(&models.UserCredentials{ID: m.userId, Token: m.token})
+	user, err := m.rlClient.Login(&models.UserCredentials{Token: m.token})
 	if err != nil {
 		return err
 	}
@@ -86,7 +84,7 @@ func (m *Model) connectFromTokenAndUserId() error {
 	c2 := rest.NewClient(serverUrl, false)
 
 	m.restClient = c2
-	if err := m.restClient.Login(&models.UserCredentials{ID: m.userId, Token: m.token}); err != nil {
+	if err := m.restClient.Login(&models.UserCredentials{ID: user.ID, Token: m.token}); err != nil {
 		log.Println("failed to login")
 		return err
 	}
@@ -108,25 +106,23 @@ func (m *Model) userLoginBegin() tea.Cmd {
 		m.loginScreen.loggedIn = false
 		return nil
 	}
-	userId, _ := GetCacheEntry("userId")
 	tokenGeneratedTime, _ := GetCacheEntry("tokenGeneratedTime")
 
 	tokenValid := CheckForTokenExpiration(tokenGeneratedTime)
 	if tokenValid {
 		m.token = token
-		m.userId = userId
-		err := m.connectFromTokenAndUserId()
+		err := m.connectFromToken()
 		if err != nil {
 			os.Exit(1)
 		}
-		go m.handleMessageStream()
+		// go m.handleMessageStream()
 
 		channelCmd := m.setChannelsInUiList()
+		m.changeSelectedChannel(0)
 		return channelCmd
 
 	} else {
 		CreateUpdateCacheEntry("token", "")
-		CreateUpdateCacheEntry("userId", "")
 		CreateUpdateCacheEntry("tokenGeneratedTime", "")
 		m.loginScreen.loginScreenState = "showLoginScreen"
 		m.loginScreen.loggedIn = false
@@ -152,35 +148,6 @@ func (m *Model) changeSelectedChannel(index int) {
 	m.loadHistory()
 }
 
-func (m *Model) handleMessageStream() {
-	m.updateMessageStream = false
-
-	for {
-		message := <-m.msgChannel
-
-		if message.RoomID != m.activeChannel.RoomId {
-			continue
-		}
-
-		m.messageHistory = append(m.messageHistory, message)
-		messageList = append(messageList, message)
-		// line := fmt.Sprintf("%s <%s> %s", message.Timestamp.Format("15:04"), message.User.UserName, text)
-		// log.Println(line)
-		// m.loadMessages = true
-		// PrintToLogFile("MESSAGE", message)
-		// PrintToLogFile("MESSAGES STREAM", messageList)
-		// PrintToLogFile("MESSAGE LIST", m.messagesList.Items())
-
-		if len(messageList) != len(m.messagesList.Items()) {
-			var msgItems []list.Item
-			for _, msg := range messageList {
-				msgItems = append(msgItems, messagessItem(msg))
-			}
-			m.updateMessageStreamCmd = m.messagesList.SetItems(msgItems)
-		}
-
-	}
-}
 
 func (m *Model) sendMessage(text string) {
 	if text != "" {
@@ -208,7 +175,6 @@ func (m *Model) loadHistory() {
 
 	for _, message := range messages {
 		m.msgChannel <- message
-		// messageList = append(messageList, message)
 	}
 
 }
@@ -233,23 +199,6 @@ func (m *Model) getSubscriptions() {
 	// log.Println(string(bs))
 }
 
-func (m *Model) changeAndPopulateChannelMessages() (tea.Model, tea.Cmd) {
-	selectedChannelIndex := m.channelList.Index()
-	m.changeSelectedChannel(selectedChannelIndex)
-	PrintToLogFile("changeAndPopulateChannelMessages", m.messageHistory)
-	var msgItems []list.Item
-	for _, msg := range messageList {
-		msgItems = append(msgItems, messagessItem(msg))
-	}
-	messagesCmd := m.messagesList.SetItems(msgItems)
-	for !m.messagesList.Paginator.OnLastPage() {
-		m.messagesList.Paginator.NextPage()
-	}
-
-	// fmt.Println(m.messageHistory)
-	return m, messagesCmd
-}
-
 func (m *Model) setChannelsInUiList() tea.Cmd {
 	var items []list.Item
 	for _, sub := range m.subscriptionList {
@@ -271,11 +220,9 @@ func (m *Model) handleUserLogOut() (tea.Model, tea.Cmd) {
 	m.email = ""
 	m.password = ""
 	m.token = ""
-	m.userId = ""
 	m.loginScreen.loginScreenState = "showLoginScreen"
 	m.loginScreen.loggedIn = false
 	CreateUpdateCacheEntry("token", "")
-	CreateUpdateCacheEntry("userId", "")
 	CreateUpdateCacheEntry("tokenGeneratedTime", "")
 	return m, nil
 }

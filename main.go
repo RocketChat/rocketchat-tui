@@ -3,7 +3,6 @@ package main
 import (
 	// "encoding/json"
 	"fmt"
-	"io"
 	"strings"
 
 	// "strings"
@@ -24,71 +23,6 @@ import (
 
 var messageList []models.Message
 
-type channelsItem models.ChannelSubscription
-
-func (i channelsItem) FilterValue() string { return i.Name }
-
-type messagessItem models.Message
-
-func (i messagessItem) FilterValue() string { return i.Timestamp.String() }
-
-type messageListDelegate struct{}
-
-func (d messageListDelegate) Height() int  { return 1 }
-func (d messageListDelegate) Spacing() int { return 0 }
-func (d messageListDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
-	return nil
-}
-func (d messageListDelegate) Render(w io.Writer, m list.Model, index int, messageListItem list.Item) {
-	i, ok := messageListItem.(messagessItem)
-	if !ok {
-		return
-	}
-	nameLetterChat := nameLetterBoxStyle.Copy().Width(3).Render(getStringFirstLetter(i.User.Name))
-
-	userFullName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).PaddingRight(1).Bold(true).Align(lipgloss.Left).Render("Sitaram Rathi")
-	userName := lipgloss.NewStyle().Foreground(lipgloss.Color("#767373")).PaddingRight(1).Bold(true).Align(lipgloss.Left).Render("@" + i.User.UserName)
-	timeStamp := lipgloss.NewStyle().Foreground(lipgloss.Color("#767373")).Align(lipgloss.Left).Render(i.Timestamp.Format("15:04"))
-	userDetails := lipgloss.JoinHorizontal(lipgloss.Left, userFullName, userName, timeStamp)
-
-	userMessage := lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#ffffff")).MaxWidth(80).Width(80).Render(i.Msg)
-	messageBox := lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinVertical(lipgloss.Top, userDetails, userMessage))
-	userMessageBox := lipgloss.NewStyle().PaddingBottom(1).Width(80).Render(lipgloss.JoinHorizontal(lipgloss.Left, nameLetterChat, messageBox))
-	// messageString = userMessageBox
-	// messageString += userMessageBox + "\n"
-	// fmt.Println(userMessageBox)
-
-	fmt.Fprintf(w, userMessageBox)
-
-	// str := fmt.Sprintf("%d. %s", index+1, i)
-}
-
-type channelListDelegate struct{}
-
-func (d channelListDelegate) Height() int  { return 1 }
-func (d channelListDelegate) Spacing() int { return 0 }
-func (d channelListDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
-	return nil
-}
-func (d channelListDelegate) Render(w io.Writer, m list.Model, index int, channelListItem list.Item) {
-	i, ok := channelListItem.(channelsItem)
-	if !ok {
-		return
-	}
-	if i.Name != "" {
-		nameLetter := sidebarTopColumnStyle.Align(lipgloss.Left).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render(getStringFirstLetter(i.Name)))
-		channelName := channelNameStyle.Copy().Bold(false).Render("# " + string(i.Name))
-
-		if index == m.Index() {
-			nameLetter = sidebarTopColumnStyle.Align(lipgloss.Left).Bold(true).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render(getStringFirstLetter(i.Name)))
-			channelName = channelNameStyle.Copy().Bold(true).Underline(true).Render("# " + string(i.Name))
-		}
-		str := channelWindowTitleStyle.Copy().PaddingBottom(1).Render(lipgloss.JoinHorizontal(lipgloss.Top, nameLetter, channelName))
-
-		fmt.Fprintf(w, str)
-	}
-}
-
 type Model struct {
 	textInput textinput.Model
 
@@ -103,18 +37,15 @@ type Model struct {
 	email    string
 	password string
 	token    string
-	userId   string
 
 	channelList  list.Model
 	messagesList list.Model
-	choice       string
 	loginScreen  *LoginScreen
 
-	updateMessageStream    bool
 	updateMessageStreamCmd tea.Cmd
 
-	loadChannels bool
-	typing       bool
+	loadChannels       bool
+	typing             bool
 
 	width  int
 	height int
@@ -195,6 +126,18 @@ func main() {
 
 }
 
+func (m *Model) waitForActivity(msgChannel chan models.Message) tea.Cmd {
+	return func() tea.Msg {
+		message := <-msgChannel
+		if message.RoomID == m.activeChannel.RoomId {
+			m.messageHistory = append(m.messageHistory, message)
+			messageList = append(messageList, message)
+			return message
+		}
+		return nil
+	}
+}
+
 func (m *Model) Init() tea.Cmd {
 	err := CacheInit()
 	if err != nil {
@@ -202,8 +145,7 @@ func (m *Model) Init() tea.Cmd {
 		os.Exit(1)
 	}
 
-	cmd := m.userLoginBegin()
-	return cmd
+	return tea.Batch(m.userLoginBegin(), m.waitForActivity(m.msgChannel))
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -232,14 +174,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if err != nil {
 							os.Exit(1)
 						}
-						go m.handleMessageStream()
+						// go m.handleMessageStream()
 
 						var cmds []tea.Cmd
 						channelCmd := m.setChannelsInUiList()
 
 						cmds = append(cmds, channelCmd, textinput.Blink)
 						m.loginScreen.loggedIn = true
-
+						m.changeSelectedChannel(0)
 						return m, tea.Batch(cmds...)
 					}
 				}
@@ -262,16 +204,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// PrintToLogFile("MESSAGES STREAM", messageList)
-	// PrintToLogFile("MESSAGE LIST", m.messagesList.Items())
-
-	if m.updateMessageStreamCmd != nil {
-		cmd := m.updateMessageStreamCmd
-		m.updateMessageStreamCmd = nil
-		return m, cmd
-	}
-
 	switch msg := msg.(type) {
+	case models.Message:
+		msgItem := messagessItem(msg)
+		cmd := m.messagesList.InsertItem(len(m.messagesList.Items()), msgItem)
+		return m, tea.Batch(m.waitForActivity(m.msgChannel), cmd)
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "ctrl+c":
@@ -280,10 +217,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if !m.typing {
 				m.typing = true
-				m, messagesCmd := m.changeAndPopulateChannelMessages()
-				// bs, _ := json.Marshal(messageList)
-				// PrintToLogFile(string(bs))
-				return m, messagesCmd
+				var msgItems []list.Item
+				cmd := m.messagesList.SetItems(msgItems)
+				m.changeSelectedChannel(m.channelList.Index())
+				return m, cmd
 			}
 
 			if m.typing {
@@ -291,10 +228,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if msg != "" {
 					m.sendMessage(msg)
 					m.textInput.Reset()
-
-					// m, messagesCmd := m.changeAndPopulateChannelMessages()
-					// bs, _ := json.Marshal(messageList)
-					// PrintToLogFile(string(bs))
+					// PrintToLogFile(msg)
 					return m, nil
 				} else {
 					m.textInput.Reset()
@@ -321,13 +255,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.textInput, cmd = m.textInput.Update(msg)
 		return m, cmd
 	}
-
-	// if m.loadMessages {
-	// 	m.loadMessages = false
-	// 	var messageCmd tea.Cmd
-	// 	m.messagesList, messageCmd = m.messagesList.Update(msg)
-	// 	return m, messageCmd
-	// }
 
 	var channelCmd tea.Cmd
 	m.channelList, channelCmd = m.channelList.Update(msg)
