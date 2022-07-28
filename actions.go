@@ -5,7 +5,7 @@ import (
 	"log"
 	"net/url"
 	"os"
-	"time"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/list"
 
@@ -46,7 +46,7 @@ func (m *Model) connectFromEmailAndPassword() error {
 
 	m.token = user.Token
 	CreateUpdateCacheEntry("token", user.Token)
-	CreateUpdateCacheEntry("tokenGeneratedTime", time.Now().Format(time.RFC3339))
+	CreateUpdateCacheEntry("tokenExpires", strconv.Itoa(int(user.TokenExpires)))
 
 	m.loginScreen.loggedIn = true
 	m.loginScreen.loginScreenState = "showTui"
@@ -106,9 +106,9 @@ func (m *Model) userLoginBegin() tea.Cmd {
 		m.loginScreen.loggedIn = false
 		return nil
 	}
-	tokenGeneratedTime, _ := GetCacheEntry("tokenGeneratedTime")
+	tokenExpiresTime, _ := GetCacheEntry("tokenExpires")
 
-	tokenValid := CheckForTokenExpiration(tokenGeneratedTime)
+	tokenValid := CheckForTokenExpiration(tokenExpiresTime)
 	if tokenValid {
 		m.token = token
 		err := m.connectFromToken()
@@ -123,7 +123,7 @@ func (m *Model) userLoginBegin() tea.Cmd {
 
 	} else {
 		CreateUpdateCacheEntry("token", "")
-		CreateUpdateCacheEntry("tokenGeneratedTime", "")
+		CreateUpdateCacheEntry("tokenExpires", "")
 		m.loginScreen.loginScreenState = "showLoginScreen"
 		m.loginScreen.loggedIn = false
 		return nil
@@ -223,6 +223,6 @@ func (m *Model) handleUserLogOut() (tea.Model, tea.Cmd) {
 	m.loginScreen.loginScreenState = "showLoginScreen"
 	m.loginScreen.loggedIn = false
 	CreateUpdateCacheEntry("token", "")
-	CreateUpdateCacheEntry("tokenGeneratedTime", "")
+	CreateUpdateCacheEntry("tokenExpires", "")
 	return m, nil
 }

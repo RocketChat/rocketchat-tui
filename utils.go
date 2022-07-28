@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,9 +74,9 @@ func PrintToLogFile(v ...interface{}) {
 	log.Println(v)
 }
 
-func CheckForTokenExpiration(tokenGeneratedTime string) bool {
-	tgt, _ := time.Parse(time.RFC3339, tokenGeneratedTime)
-	tgtAdd24Hrs := tgt.AddDate(0, 0, 1)
-	currentTime := time.Now()
-	return tgt.Before(currentTime) && tgtAdd24Hrs.After(currentTime)
+func CheckForTokenExpiration(tokenExpirationTime string) bool {
+	today := time.Now()
+	i, _ := strconv.ParseInt(tokenExpirationTime, 10, 64)
+	tokenExpires := time.Unix(0, (i)*int64(time.Millisecond))
+	return today.Before(tokenExpires)
 }
