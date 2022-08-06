@@ -4,9 +4,11 @@ import (
 	// "encoding/json"
 	"fmt"
 	"strings"
+	"time"
 
 	// "strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 
@@ -21,18 +23,19 @@ import (
 	"golang.org/x/term"
 )
 
-var messageList []models.Message
-
 type Model struct {
 	textInput textinput.Model
+	keys      *listKeyMap
 
-	rlClient         *realtime.Client
-	restClient       *rest.Client
-	subscriptionList []models.ChannelSubscription
-	msgChannel       chan models.Message
-	subscribed       map[string]string
-	messageHistory   []models.Message
-	activeChannel    models.ChannelSubscription
+	rlClient             *realtime.Client
+	restClient           *rest.Client
+	subscriptionList     []models.ChannelSubscription
+	msgChannel           chan models.Message
+	subscribed           map[string]string
+	messageHistory       []models.Message
+	activeChannel        models.ChannelSubscription
+	lastMessageTimestamp *time.Time
+	loadMorePastMessages bool
 
 	email    string
 	password string
@@ -42,13 +45,39 @@ type Model struct {
 	messagesList list.Model
 	loginScreen  *LoginScreen
 
-	updateMessageStreamCmd tea.Cmd
-
-	loadChannels       bool
-	typing             bool
+	loadChannels bool
+	typing       bool
 
 	width  int
 	height int
+}
+
+type listKeyMap struct {
+	messageListNextPage        key.Binding
+	messageListPreviousPage    key.Binding
+	channelListNextChannel     key.Binding
+	channelListPreviousChannel key.Binding
+}
+
+func newListKeyMap() *listKeyMap {
+	return &listKeyMap{
+		messageListNextPage: key.NewBinding(
+			key.WithKeys("ctrl+right"),
+			key.WithHelp("ctrl+right", "Next Message Page"),
+		),
+		messageListPreviousPage: key.NewBinding(
+			key.WithKeys("ctrl+left"),
+			key.WithHelp("ctrl+left", "Previous Message Page"),
+		),
+		channelListNextChannel: key.NewBinding(
+			key.WithKeys("ctrl+down"),
+			key.WithHelp("ctrl+down", "Next Channel"),
+		),
+		channelListPreviousChannel: key.NewBinding(
+			key.WithKeys("ctrl+up"),
+			key.WithHelp("ctrl+up", "Previous Channel"),
+		),
+	}
 }
 
 type LoginScreen struct {
@@ -77,14 +106,14 @@ func IntialModelState() *Model {
 	p.Placeholder = "Enter your password"
 	p.Focus()
 
-	at := textinput.NewModel()
-	at.Placeholder = "Enter your auth token"
-	at.Focus()
+	ati := textinput.NewModel()
+	ati.Placeholder = "Enter your auth token"
+	ati.Focus()
 
 	intialLoginScreen := &LoginScreen{
 		emailInput:       e,
 		passwordInput:    p,
-		authTokenInput:   at,
+		authTokenInput:   ati,
 		activeElement:    1,
 		loggedIn:         false,
 		loginScreenState: "showLoginScreen",
@@ -96,19 +125,35 @@ func IntialModelState() *Model {
 	t.Focus()
 
 	items := []list.Item{}
-	l := list.New(items, channelListDelegate{}, w/4-1, 14)
-	msgs := list.New(items, messageListDelegate{}, 3*w/4-10, 16)
+	listKeys := newListKeyMap()
+	cl := list.New(items, channelListDelegate{}, w/4-1, 14)
+	msgsList := list.New(items, messageListDelegate{}, 3*w/4-10, 16)
+
+	cl.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			listKeys.channelListNextChannel,
+			listKeys.channelListPreviousChannel,
+		}
+	}
+
+	msgsList.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			listKeys.messageListNextPage,
+			listKeys.messageListPreviousPage,
+		}
+	}
 
 	initialModel := &Model{
-		channelList:            l,
-		messagesList:           msgs,
-		loginScreen:            intialLoginScreen,
-		textInput:              t,
-		width:                  w,
-		height:                 h,
-		subscribed:             make(map[string]string),
-		msgChannel:             make(chan models.Message, 100),
-		updateMessageStreamCmd: nil,
+		channelList:          cl,
+		keys:                 listKeys,
+		messagesList:         msgsList,
+		loginScreen:          intialLoginScreen,
+		textInput:            t,
+		width:                w,
+		height:               h,
+		subscribed:           make(map[string]string),
+		msgChannel:           make(chan models.Message, 100),
+		loadMorePastMessages: false,
 	}
 	return initialModel
 }
@@ -126,12 +171,11 @@ func main() {
 
 }
 
-func (m *Model) waitForActivity(msgChannel chan models.Message) tea.Cmd {
+func (m *Model) waitForIncomingMessage(msgChannel chan models.Message) tea.Cmd {
 	return func() tea.Msg {
 		message := <-msgChannel
 		if message.RoomID == m.activeChannel.RoomId {
 			m.messageHistory = append(m.messageHistory, message)
-			messageList = append(messageList, message)
 			return message
 		}
 		return nil
@@ -145,7 +189,7 @@ func (m *Model) Init() tea.Cmd {
 		os.Exit(1)
 	}
 
-	return tea.Batch(m.userLoginBegin(), m.waitForActivity(m.msgChannel))
+	return tea.Batch(m.userLoginBegin(), m.waitForIncomingMessage(m.msgChannel))
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -174,8 +218,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						if err != nil {
 							os.Exit(1)
 						}
-						// go m.handleMessageStream()
-
 						var cmds []tea.Cmd
 						channelCmd := m.setChannelsInUiList()
 
@@ -208,8 +250,33 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case models.Message:
 		msgItem := messagessItem(msg)
 		cmd := m.messagesList.InsertItem(len(m.messagesList.Items()), msgItem)
-		return m, tea.Batch(m.waitForActivity(m.msgChannel), cmd)
+		m.messagesList.Paginator.NextPage()
+		m.loadMorePastMessages = false
+		return m, tea.Batch(m.waitForIncomingMessage(m.msgChannel), cmd)
 	case tea.KeyMsg:
+		switch {
+		case key.Matches(msg, m.keys.channelListNextChannel):
+			m.channelList.CursorDown()
+			return m, nil
+		case key.Matches(msg, m.keys.channelListPreviousChannel):
+			m.channelList.CursorUp()
+			return m, nil
+		case key.Matches(msg, m.keys.messageListNextPage):
+			m.messagesList.Paginator.NextPage()
+			return m, nil
+		case key.Matches(msg, m.keys.messageListPreviousPage):
+			m.messagesList.Paginator.PrevPage()
+			if m.messagesList.Paginator.Page == 0 && m.loadMorePastMessages {
+				m.loadMorePastMessages = false
+				msgsCmd := m.fetchPastMessages()
+				return m, msgsCmd
+			}
+			if m.messagesList.Paginator.Page == 0 {
+				m.loadMorePastMessages = true
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
@@ -220,6 +287,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				var msgItems []list.Item
 				cmd := m.messagesList.SetItems(msgItems)
 				m.changeSelectedChannel(m.channelList.Index())
+				m.loadMorePastMessages = false
 				return m, cmd
 			}
 
@@ -235,7 +303,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 			}
 
-		case "ctrl+left":
+		case "esc":
 			m.typing = false
 			return m, nil
 

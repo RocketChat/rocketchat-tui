@@ -2,11 +2,13 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"strconv"
+
 	"github.com/RocketChat/Rocket.Chat.Go.SDK/models"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"io"
 )
 
 type channelsItem models.ChannelSubscription
@@ -120,8 +122,8 @@ func (m *Model) RenderTui() string {
 	starIcon := starIconStyle.Render("☆")
 
 	channelWindowTitle := channelWindowTitleStyle.Width((3 * m.width / 8) - 2).Render(lipgloss.JoinHorizontal(lipgloss.Top, channelTopbarNameLetterBox, channelName, starIcon))
-	channelOptionsButton := channelOptionsButtonStyle.Width((3 * m.width / 8)).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render("⠇"))
-	channelWindowTopbar := channelWindowTopbarStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center, channelWindowTitle, channelOptionsButton))
+	messagePagesCount := channelOptionsButtonStyle.Width((3 * m.width / 8)).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render(strconv.Itoa(m.messagesList.Paginator.Page+1) + "/" + strconv.Itoa((m.messagesList.Paginator.TotalPages))))
+	channelWindowTopbar := channelWindowTopbarStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center, channelWindowTitle, messagePagesCount))
 
 	channelConversationScreen := lipgloss.NewStyle().Height(m.height - 7).Render(m.messagesList.View())
 	messageEmojiIcon := messageEmojiIconStyle.Render("☺")

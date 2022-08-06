@@ -7,7 +7,7 @@ require (
 	github.com/RocketChat/Rocket.Chat.Go.SDK v0.0.0-20220511045534-400a3e757bb3 // indirect
 	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
-	github.com/charmbracelet/bubbles v0.11.0 // indirect
+	github.com/charmbracelet/bubbles v0.13.0 // indirect
 	github.com/charmbracelet/bubbletea v0.21.0 // indirect
 	github.com/charmbracelet/lipgloss v0.5.0 // indirect
 	github.com/containerd/console v1.0.3 // indirect
