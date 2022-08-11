@@ -11,10 +11,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-type channelsItem models.ChannelSubscription
-
-func (i channelsItem) FilterValue() string { return i.Name }
-
 type messagessItem models.Message
 
 func (i messagessItem) FilterValue() string { return i.Timestamp.String() }
@@ -33,7 +29,7 @@ func (d messageListDelegate) Render(w io.Writer, m list.Model, index int, messag
 	}
 	nameLetterChat := nameLetterBoxStyle.Copy().Width(3).Render(getStringFirstLetter(i.User.Name))
 
-	userFullName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).PaddingRight(1).Bold(true).Align(lipgloss.Left).Render("Sitaram Rathi")
+	userFullName := lipgloss.NewStyle().Foreground(lipgloss.Color("#ffffff")).PaddingRight(1).Bold(true).Align(lipgloss.Left).Render(i.User.Name)
 	userName := lipgloss.NewStyle().Foreground(lipgloss.Color("#767373")).PaddingRight(1).Bold(true).Align(lipgloss.Left).Render("@" + i.User.UserName)
 	timeStamp := lipgloss.NewStyle().Foreground(lipgloss.Color("#767373")).Align(lipgloss.Left).Render(i.Timestamp.Format("15:04"))
 	userDetails := lipgloss.JoinHorizontal(lipgloss.Left, userFullName, userName, timeStamp)
@@ -58,6 +54,10 @@ func (d messageListDelegate) Render(w io.Writer, m list.Model, index int, messag
 
 	// str := fmt.Sprintf("%d. %s", index+1, i)
 }
+
+type channelsItem models.ChannelSubscription
+
+func (i channelsItem) FilterValue() string { return i.Name }
 
 type channelListDelegate struct{}
 
@@ -166,24 +166,12 @@ func (m *Model) RenderLoginScreen() string {
 		passowrdInputBox = lipgloss.NewStyle().Width(46).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#767373")).Foreground(lipgloss.Color("#ffffff")).Align(lipgloss.Left).Render(m.loginScreen.passwordInput.View())
 	}
 
-	// authTokenInputHeading := lipgloss.NewStyle().Align(lipgloss.Left).MarginTop(5).Foreground(lipgloss.Color("#cbcbcb")).Bold(true).Render("Password")
-	// authTokenInputBox := lipgloss.NewStyle().Border(lipgloss.NormalBorder()).BorderForeground(lipgloss.Color("#cbcbcb")).Foreground(lipgloss.Color("#1b1b1b")).Align(lipgloss.Left).Render(m.loginScreen.authTokenInput.View())
-
 	var loginButton string
 	if m.loginScreen.activeElement == 3 {
 		loginButton = lipgloss.NewStyle().Width(48).Background(lipgloss.Color("#00686D")).Foreground(lipgloss.Color("#ffffff")).Align(lipgloss.Center).Padding(1, 2).MarginBottom(1).MarginTop(2).Render("LOG INTO TUI")
 	} else {
 		loginButton = lipgloss.NewStyle().Width(48).Background(lipgloss.Color("#119da4")).Foreground(lipgloss.Color("#ffffff")).Align(lipgloss.Center).Padding(1, 2).MarginBottom(1).MarginTop(2).Render("LOG INTO TUI")
 	}
-
-	// orText := lipgloss.NewStyle().Width(46).Align(lipgloss.Center).Foreground(lipgloss.Color("#767373")).MarginTop(1).Render("OR")
-
-	// var authLoginButton string
-	// if m.loginScreen.activeElement == 4 {
-	// 	authLoginButton = lipgloss.NewStyle().Width(48).Background(lipgloss.Color("#00686D")).Foreground(lipgloss.Color("#ffffff")).Align(lipgloss.Center).Padding(1, 2).MarginTop(1).MarginBottom(1).Render("LOG IN USING AUTH TOKEN")
-	// } else {
-	// 	authLoginButton = lipgloss.NewStyle().Width(48).Background(lipgloss.Color("#119da4")).Foreground(lipgloss.Color("#ffffff")).Align(lipgloss.Center).Padding(1, 2).MarginTop(1).MarginBottom(1).Render("LOG IN USING AUTH TOKEN")
-	// }
 
 	loginUiBox := lipgloss.NewStyle().Align(lipgloss.Center).BorderStyle(lipgloss.ThickBorder()).BorderForeground(lipgloss.Color("#119da4")).Height(15).Width(50).Render(lipgloss.JoinVertical(lipgloss.Top, welcomeText, loginHeadingText, emailInputHeading, emailInputBox, passowrdInputHeading, passowrdInputBox, loginButton))
 

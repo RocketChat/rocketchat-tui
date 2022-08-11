@@ -11,13 +11,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-type Credentials struct {
-	email string
-	pass  string
-}
-
-// use godot package to load/read the .env file and
-// return the value of the key
 func goDotEnvVariable(key string) string {
 
 	// load .env file
@@ -28,17 +21,6 @@ func goDotEnvVariable(key string) string {
 	}
 
 	return os.Getenv(key)
-}
-
-func getUserCredentails() *Credentials {
-	EMAIL := goDotEnvVariable("EMAIL")
-	PASS := goDotEnvVariable("PASS")
-
-	data := &Credentials{
-		email: EMAIL,
-		pass:  PASS,
-	}
-	return data
 }
 
 func getServerUrl() string {
@@ -53,15 +35,6 @@ func getStringFirstLetter(str string) string {
 	}
 	return letter
 }
-
-// func findPositionSubscriptionList(subscriptionList []models.ChannelSubscription, value models.ChannelSubscription) int {
-// 	for p, v := range subscriptionList {
-// 		if v.RoomId == value.RoomId {
-// 			return p
-// 		}
-// 	}
-// 	return -1
-// }
 
 func PrintToLogFile(v ...interface{}) {
 	f, err := os.OpenFile("logs.txt", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)

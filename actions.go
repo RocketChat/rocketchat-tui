@@ -256,8 +256,6 @@ func (m *Model) getSubscriptions() {
 			m.subscriptionList = append(m.subscriptionList, sub)
 		}
 	}
-
-	m.loadChannels = true
 }
 
 func (m *Model) setChannelsInUiList() tea.Cmd {
@@ -269,7 +267,6 @@ func (m *Model) setChannelsInUiList() tea.Cmd {
 	}
 	// PrintToLogFile(m.messageHistory)
 	channelCmd := m.channelList.SetItems(items)
-	m.loadChannels = false
 	m.activeChannel = m.subscriptionList[0]
 	return channelCmd
 }
@@ -286,4 +283,16 @@ func (m *Model) handleUserLogOut() (tea.Model, tea.Cmd) {
 	CreateUpdateCacheEntry("token", "")
 	CreateUpdateCacheEntry("tokenExpires", "")
 	return m, nil
+}
+
+func (m *Model) waitForIncomingMessage(msgChannel chan models.Message) tea.Cmd {
+	return func() tea.Msg {
+		message := <-msgChannel
+		if message.RoomID == m.activeChannel.RoomId {
+			// PrintToLogFile("INCOMINGGGGGG")
+			m.messageHistory = append(m.messageHistory, message)
+			return message
+		}
+		return nil
+	}
 }

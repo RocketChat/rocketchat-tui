@@ -45,8 +45,7 @@ type Model struct {
 	messagesList list.Model
 	loginScreen  *LoginScreen
 
-	loadChannels bool
-	typing       bool
+	typing bool
 
 	width  int
 	height int
@@ -95,8 +94,6 @@ func IntialModelState() *Model {
 	if err != nil {
 		return nil
 	}
-
-	// credentials := getUserCredentails()
 
 	e := textinput.NewModel()
 	e.Placeholder = "Enter your email"
@@ -159,9 +156,7 @@ func IntialModelState() *Model {
 }
 
 func main() {
-
 	initialModel := IntialModelState()
-
 	err := tea.NewProgram(initialModel, tea.WithAltScreen()).Start()
 
 	if err != nil {
@@ -169,17 +164,6 @@ func main() {
 		os.Exit(1)
 	}
 
-}
-
-func (m *Model) waitForIncomingMessage(msgChannel chan models.Message) tea.Cmd {
-	return func() tea.Msg {
-		message := <-msgChannel
-		if message.RoomID == m.activeChannel.RoomId {
-			m.messageHistory = append(m.messageHistory, message)
-			return message
-		}
-		return nil
-	}
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -202,30 +186,25 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+c":
 				return m, tea.Quit
 			case "tab", "ctrl+down":
-				if m.loginScreen.activeElement < 4 {
+				if m.loginScreen.activeElement < 3 {
 					m.loginScreen.activeElement = m.loginScreen.activeElement + 1
 				} else {
 					m.loginScreen.activeElement = 1
 				}
 			case "enter":
-				if m.loginScreen.activeElement == 4 {
-					fmt.Println("Login Using Auth Token")
-				} else {
-					m.loginScreen.activeElement = 3
-					if m.email != "" && m.password != "" {
-						// fmt.Println("Login User")
-						err := m.connectFromEmailAndPassword()
-						if err != nil {
-							os.Exit(1)
-						}
-						var cmds []tea.Cmd
-						channelCmd := m.setChannelsInUiList()
-
-						cmds = append(cmds, channelCmd, textinput.Blink)
-						m.loginScreen.loggedIn = true
-						m.changeSelectedChannel(0)
-						return m, tea.Batch(cmds...)
+				m.loginScreen.activeElement = 3
+				if m.email != "" && m.password != "" {
+					err := m.connectFromEmailAndPassword()
+					if err != nil {
+						os.Exit(1)
 					}
+					var cmds []tea.Cmd
+					channelCmd := m.setChannelsInUiList()
+
+					cmds = append(cmds, channelCmd, textinput.Blink)
+					m.loginScreen.loggedIn = true
+					m.changeSelectedChannel(0)
+					return m, tea.Batch(cmds...)
 				}
 			}
 
@@ -253,6 +232,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.messagesList.Paginator.NextPage()
 		m.loadMorePastMessages = false
 		return m, tea.Batch(m.waitForIncomingMessage(m.msgChannel), cmd)
+
 	case tea.KeyMsg:
 		switch {
 		case key.Matches(msg, m.keys.channelListNextChannel):
@@ -280,7 +260,6 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "ctrl+c":
 			return m, tea.Quit
-
 		case "enter":
 			if !m.typing {
 				m.typing = true
@@ -302,16 +281,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.textInput.Reset()
 				}
 			}
-
 		case "esc":
 			m.typing = false
 			return m, nil
-
 		case "ctrl+l", "ctrl+L":
 			m, cmd := m.handleUserLogOut()
 			return m, cmd
-
 		}
+
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
 		m.width = msg.Width
