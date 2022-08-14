@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
 
@@ -124,8 +125,10 @@ func (m *Model) userLoginBegin() tea.Cmd {
 		// go m.handleMessageStream()
 
 		channelCmd := m.setChannelsInUiList()
+		m.typing = true
 		m.changeSelectedChannel(0)
-		return channelCmd
+		setSlashCommandsList := m.fetchAllSlashCommands()
+		return tea.Batch(channelCmd, setSlashCommandsList)
 
 	} else {
 		CreateUpdateCacheEntry("token", "")
@@ -294,5 +297,148 @@ func (m *Model) waitForIncomingMessage(msgChannel chan models.Message) tea.Cmd {
 			return message
 		}
 		return nil
+	}
+}
+
+func (m *Model) fetchAllSlashCommands() tea.Cmd {
+	params := url.Values{}
+	params.Add("offset", "0")
+	resp, err := m.restClient.GetSlashCommandsList(params)
+	if err != nil {
+		PrintToLogFile(err, resp)
+		panic(err)
+	}
+	var items []list.Item
+	m.slashCommands = resp
+	for _, cmd := range resp {
+		if cmd.Command != "" {
+			items = append(items, slashCommandsItem(cmd))
+		}
+	}
+	slashCommandsList := m.slashCommandsList.SetItems(items)
+	return slashCommandsList
+}
+
+func (m *Model) executeSlashCommand(cmnd string, params string) error {
+	resp, err := m.restClient.ExecuteSlashCommand(&m.activeChannel, cmnd, params)
+	if err != nil {
+		PrintToLogFile(err, resp)
+		return err
+	}
+	return nil
+}
+
+func (m *Model) handleShowingAndFilteringSlashCommandList() (tea.Model, tea.Cmd) {
+	val := m.textInput.Value()
+	chars := []rune(val)
+
+	if val == "/" {
+		m.showSlashCommandList = true
+		return m, nil
+	}
+	if len(chars) > 1 && string(chars[0]) == "/" && string(chars[1]) != " " {
+		var slashCmnds []string
+		for _, c := range m.slashCommands {
+			slashCmnds = append(slashCmnds, c.Command)
+		}
+		splittedString := strings.Split(val, "/")
+		typedCmnd := strings.Split(splittedString[1], " ")
+		ranks := m.slashCommandsList.Filter(typedCmnd[0], slashCmnds)
+		if typedCmnd[0] != m.selectedSlashCommand.Command {
+			m.showSlashCommandList = true
+			if len(ranks) > 0 {
+				var items []list.Item
+				for _, rank := range ranks {
+					items = append(items, slashCommandsItem(m.slashCommands[rank.Index]))
+				}
+				slashCommandsList := m.slashCommandsList.SetItems(items)
+				return m, slashCommandsList
+			}
+		}
+		if len(ranks) == 0 {
+			PrintToLogFile("len(ranks) == 0 && m.showSlashCommandList")
+			m.showSlashCommandList = false
+			m.selectedSlashCommand = &models.SlashCommand{}
+
+			var items []list.Item
+			for _, cmd := range m.slashCommands {
+				if cmd.Command != "" {
+					items = append(items, slashCommandsItem(cmd))
+				}
+			}
+			slashCommandsList := m.slashCommandsList.SetItems(items)
+			return m, slashCommandsList
+		}
+	} else {
+		m.showSlashCommandList = false
+		m.selectedSlashCommand = &models.SlashCommand{}
+
+		var items []list.Item
+		for _, cmd := range m.slashCommands {
+			if cmd.Command != "" {
+				items = append(items, slashCommandsItem(cmd))
+			}
+		}
+		slashCommandsList := m.slashCommandsList.SetItems(items)
+		return m, slashCommandsList
+	}
+	return m, nil
+}
+
+func (m *Model) handleMessageInput() (tea.Model, tea.Cmd) {
+	value := m.textInput.Value()
+	chars := []rune(value)
+
+	if m.showSlashCommandList {
+		cmnd, ok := m.slashCommandsList.SelectedItem().(slashCommandsItem)
+		if ok {
+			m.textInput.SetValue("/" + cmnd.Command + " ")
+			m.textInput.CursorEnd()
+			m.selectedSlashCommand = &models.SlashCommand{
+				Command:         cmnd.Command,
+				Params:          cmnd.Params,
+				Description:     cmnd.Description,
+				ProvidesPreview: cmnd.ProvidesPreview,
+				ClientOnly:      cmnd.ClientOnly,
+			}
+		}
+		m.showSlashCommandList = false
+		return m, nil
+	}
+	if len(chars) > 1 && string(chars[0]) == "/" && string(chars[1]) != " " {
+		splittedString := strings.Split(value, "/")
+		typedCmnd := strings.Split(splittedString[1], " ")
+		if typedCmnd[0] == m.selectedSlashCommand.Command {
+			params := strings.Join(typedCmnd[1:], " ")
+			err := m.executeSlashCommand(m.selectedSlashCommand.Command, params)
+			if err != nil {
+				panic(err)
+			}
+			PrintToLogFile("EXECUTE COMMAND")
+			m.textInput.Reset()
+			m.selectedSlashCommand = &models.SlashCommand{}
+			return m, nil
+		} else {
+			m, cmd := m.handleMessageSending()
+			return m, cmd
+		}
+	} else {
+		m, cmd := m.handleMessageSending()
+		return m, cmd
+	}
+}
+
+func (m *Model) handleMessageSending() (tea.Model, tea.Cmd) {
+	msg := strings.TrimSpace(m.textInput.Value())
+	if msg != "" {
+		PrintToLogFile("m.selectedSlashCommand", m.selectedSlashCommand.Command)
+		PrintToLogFile("MSG", msg)
+		m.sendMessage(msg)
+		m.textInput.Reset()
+		// PrintToLogFile(msg)
+		return m, nil
+	} else {
+		m.textInput.Reset()
+		return m, nil
 	}
 }

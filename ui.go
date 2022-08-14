@@ -62,7 +62,7 @@ func (i channelsItem) FilterValue() string { return i.Name }
 type channelListDelegate struct{}
 
 func (d channelListDelegate) Height() int  { return 1 }
-func (d channelListDelegate) Spacing() int { return 0 }
+func (d channelListDelegate) Spacing() int { return 1 }
 func (d channelListDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
 	return nil
 }
@@ -85,7 +85,37 @@ func (d channelListDelegate) Render(w io.Writer, m list.Model, index int, channe
 	}
 }
 
+type slashCommandsItem models.SlashCommand
+
+func (i slashCommandsItem) FilterValue() string { return i.Command }
+
+type slashCommandsListDelegate struct{}
+
+func (d slashCommandsListDelegate) Height() int  { return 1 }
+func (d slashCommandsListDelegate) Spacing() int { return 0 }
+func (d slashCommandsListDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+	return nil
+}
+func (d slashCommandsListDelegate) Render(w io.Writer, m list.Model, index int, slashCommandsListItem list.Item) {
+	i, ok := slashCommandsListItem.(slashCommandsItem)
+	if !ok {
+		return
+	}
+	if i.Command != "" {
+		slashCommand := channelNameStyle.Copy().Bold(false).Align(lipgloss.Left).UnsetPaddingTop().UnsetMarginTop().MaxWidth(120).Render("/" + string(i.Command))
+		if index == m.Index() {
+			slashCommand = channelNameStyle.Copy().Align(lipgloss.Left).UnsetPaddingTop().UnsetMarginTop().Foreground(lipgloss.Color("#119da4")).Render("/" + string(i.Command))
+		}
+		fmt.Fprintf(w, slashCommand)
+	}
+
+}
+
 func (m *Model) RenderTui() string {
+	cmndboxSpace := 8
+	if m.showSlashCommandList {
+		cmndboxSpace = 13
+	}
 	m.channelList.Title = "CHANNELS"
 	m.channelList.SetShowStatusBar(false)
 	m.channelList.SetFilteringEnabled(false)
@@ -99,6 +129,14 @@ func (m *Model) RenderTui() string {
 	m.messagesList.SetFilteringEnabled(false)
 	m.messagesList.SetShowHelp(false)
 	m.messagesList.SetShowPagination(false)
+
+	m.slashCommandsList.Title = "COMMANDS"
+	m.slashCommandsList.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ffffff")).UnsetMargins().UnsetPadding()
+	m.slashCommandsList.SetShowFilter(true)
+	m.slashCommandsList.SetFilteringEnabled(true)
+	m.slashCommandsList.SetShowStatusBar(false)
+	m.slashCommandsList.SetShowHelp(false)
+	m.slashCommandsList.SetShowPagination(false)
 
 	nameLetter := sidebarTopColumnStyle.Width(m.width / 8).Align(lipgloss.Left).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render("S"))
 	newChannelButton := sidebarTopColumnStyle.Width(m.width / 8).Align(lipgloss.Right).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render("✍."))
@@ -125,7 +163,13 @@ func (m *Model) RenderTui() string {
 	messagePagesCount := channelOptionsButtonStyle.Width((3 * m.width / 8)).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render(strconv.Itoa(m.messagesList.Paginator.Page+1) + "/" + strconv.Itoa((m.messagesList.Paginator.TotalPages))))
 	channelWindowTopbar := channelWindowTopbarStyle.Render(lipgloss.JoinHorizontal(lipgloss.Center, channelWindowTitle, messagePagesCount))
 
-	channelConversationScreen := lipgloss.NewStyle().Height(m.height - 7).Render(m.messagesList.View())
+	channelConversationScreen := lipgloss.NewStyle().Height(m.height - cmndboxSpace).MaxHeight(m.height - cmndboxSpace).Render(m.messagesList.View())
+
+	slashCommandsBox := ""
+	if m.showSlashCommandList {
+		slashCommandsBox = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, true, false, true).BorderForeground(lipgloss.Color("#119da4")).Align(lipgloss.Left).Width((3 * m.width / 4) - 4).Render(m.slashCommandsList.View())
+	}
+
 	messageEmojiIcon := messageEmojiIconStyle.Render("☺")
 
 	var channelMessageInputBox string
@@ -137,7 +181,7 @@ func (m *Model) RenderTui() string {
 
 	channelWindow := lipgloss.Place(3*(m.width/4)-2, m.height-2,
 		lipgloss.Left, lipgloss.Top,
-		channelWindowStyle.Height(m.height-2).Width(3*(m.width/4)).Render(lipgloss.JoinVertical(lipgloss.Top, channelWindowTopbar, channelConversationScreen, channelMessageInputBox)),
+		channelWindowStyle.Height(m.height-2).Width(3*(m.width/4)).Render(lipgloss.JoinVertical(lipgloss.Top, channelWindowTopbar, channelConversationScreen, slashCommandsBox, channelMessageInputBox)),
 	)
 
 	instruction := instructionStyle.Width(m.width).Render("Press Ctrl + C - quit • Ctrl + H - help • Ctrl + Arrows - for navigation in pane • Enter - send message • Ctrl + L - Log out")

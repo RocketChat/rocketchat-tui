@@ -1,12 +1,8 @@
 package main
 
 import (
-	// "encoding/json"
 	"fmt"
-	"strings"
 	"time"
-
-	// "strings"
 
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
@@ -35,27 +31,34 @@ type Model struct {
 	messageHistory       []models.Message
 	activeChannel        models.ChannelSubscription
 	lastMessageTimestamp *time.Time
-	loadMorePastMessages bool
 
 	email    string
 	password string
 	token    string
 
-	channelList  list.Model
-	messagesList list.Model
-	loginScreen  *LoginScreen
+	channelList          list.Model
+	messagesList         list.Model
+	slashCommandsList    list.Model
+	slashCommands        []models.SlashCommand
+	selectedSlashCommand *models.SlashCommand
 
-	typing bool
+	loginScreen *LoginScreen
+
+	typing               bool
+	loadMorePastMessages bool
+	showSlashCommandList bool
 
 	width  int
 	height int
 }
 
 type listKeyMap struct {
-	messageListNextPage        key.Binding
-	messageListPreviousPage    key.Binding
-	channelListNextChannel     key.Binding
-	channelListPreviousChannel key.Binding
+	messageListNextPage             key.Binding
+	messageListPreviousPage         key.Binding
+	channelListNextChannel          key.Binding
+	channelListPreviousChannel      key.Binding
+	slashCommandListNextCommand     key.Binding
+	slashCommandListPreviousCommand key.Binding
 }
 
 func newListKeyMap() *listKeyMap {
@@ -75,6 +78,14 @@ func newListKeyMap() *listKeyMap {
 		channelListPreviousChannel: key.NewBinding(
 			key.WithKeys("ctrl+up"),
 			key.WithHelp("ctrl+up", "Previous Channel"),
+		),
+		slashCommandListNextCommand: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("down", "Next Slash Command"),
+		),
+		slashCommandListPreviousCommand: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("up", "Previous Slash Command"),
 		),
 	}
 }
@@ -125,6 +136,7 @@ func IntialModelState() *Model {
 	listKeys := newListKeyMap()
 	cl := list.New(items, channelListDelegate{}, w/4-1, 14)
 	msgsList := list.New(items, messageListDelegate{}, 3*w/4-10, 16)
+	slashCmndsList := list.New(items, slashCommandsListDelegate{}, 3*w/4-10, 5)
 
 	cl.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
@@ -140,10 +152,18 @@ func IntialModelState() *Model {
 		}
 	}
 
+	slashCmndsList.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			listKeys.slashCommandListNextCommand,
+			listKeys.slashCommandListPreviousCommand,
+		}
+	}
+
 	initialModel := &Model{
 		channelList:          cl,
 		keys:                 listKeys,
 		messagesList:         msgsList,
+		slashCommandsList:    slashCmndsList,
 		loginScreen:          intialLoginScreen,
 		textInput:            t,
 		width:                w,
@@ -151,6 +171,8 @@ func IntialModelState() *Model {
 		subscribed:           make(map[string]string),
 		msgChannel:           make(chan models.Message, 100),
 		loadMorePastMessages: false,
+		showSlashCommandList: false,
+		selectedSlashCommand: &models.SlashCommand{},
 	}
 	return initialModel
 }
@@ -255,6 +277,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.loadMorePastMessages = true
 			}
 			return m, nil
+		case key.Matches(msg, m.keys.slashCommandListNextCommand) && m.showSlashCommandList:
+			m.slashCommandsList.CursorDown()
+			return m, nil
+		case key.Matches(msg, m.keys.slashCommandListPreviousCommand) && m.showSlashCommandList:
+			m.slashCommandsList.CursorUp()
+			return m, nil
 		}
 
 		switch msg.String() {
@@ -271,15 +299,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if m.typing {
-				msg := strings.TrimSpace(m.textInput.Value())
-				if msg != "" {
-					m.sendMessage(msg)
-					m.textInput.Reset()
-					// PrintToLogFile(msg)
-					return m, nil
-				} else {
-					m.textInput.Reset()
-				}
+				m, cmd := m.handleMessageInput()
+				return m, cmd
 			}
 		case "esc":
 			m.typing = false
@@ -298,7 +319,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.typing {
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
-		return m, cmd
+		m, slashCmnd := m.handleShowingAndFilteringSlashCommandList()
+		return m, tea.Batch(cmd, slashCmnd)
 	}
 
 	var channelCmd tea.Cmd
@@ -307,7 +329,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var messageCmd tea.Cmd
 	m.messagesList, messageCmd = m.messagesList.Update(msg)
 
-	cmds = append(cmds, channelCmd, messageCmd)
+	var slashCmd tea.Cmd
+	m.slashCommandsList, slashCmd = m.slashCommandsList.Update(msg)
+
+	cmds = append(cmds, channelCmd, messageCmd, slashCmd)
 	return m, tea.Batch(cmds...)
 }
 
