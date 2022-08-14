@@ -111,6 +111,8 @@ func IntialModelState() *Model {
 
 	p := textinput.NewModel()
 	p.Placeholder = "Enter your password"
+	p.EchoMode = textinput.EchoPassword
+	p.EchoCharacter = '•'
 	p.Focus()
 
 	intialLoginScreen := &LoginScreen{
