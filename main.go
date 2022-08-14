@@ -93,7 +93,6 @@ func newListKeyMap() *listKeyMap {
 type LoginScreen struct {
 	emailInput       textinput.Model
 	passwordInput    textinput.Model
-	authTokenInput   textinput.Model
 	activeElement    int
 	loginScreenState string
 	loggedIn         bool
@@ -114,14 +113,9 @@ func IntialModelState() *Model {
 	p.Placeholder = "Enter your password"
 	p.Focus()
 
-	ati := textinput.NewModel()
-	ati.Placeholder = "Enter your auth token"
-	ati.Focus()
-
 	intialLoginScreen := &LoginScreen{
 		emailInput:       e,
 		passwordInput:    p,
-		authTokenInput:   ati,
 		activeElement:    1,
 		loggedIn:         false,
 		loginScreenState: "showLoginScreen",

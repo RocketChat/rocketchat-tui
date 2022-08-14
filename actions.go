@@ -122,8 +122,6 @@ func (m *Model) userLoginBegin() tea.Cmd {
 		if err != nil {
 			os.Exit(1)
 		}
-		// go m.handleMessageStream()
-
 		channelCmd := m.setChannelsInUiList()
 		m.typing = true
 		m.changeSelectedChannel(0)
@@ -268,7 +266,6 @@ func (m *Model) setChannelsInUiList() tea.Cmd {
 			items = append(items, channelsItem(sub))
 		}
 	}
-	// PrintToLogFile(m.messageHistory)
 	channelCmd := m.channelList.SetItems(items)
 	m.activeChannel = m.subscriptionList[0]
 	return channelCmd
@@ -292,7 +289,6 @@ func (m *Model) waitForIncomingMessage(msgChannel chan models.Message) tea.Cmd {
 	return func() tea.Msg {
 		message := <-msgChannel
 		if message.RoomID == m.activeChannel.RoomId {
-			// PrintToLogFile("INCOMINGGGGGG")
 			m.messageHistory = append(m.messageHistory, message)
 			return message
 		}
@@ -356,7 +352,6 @@ func (m *Model) handleShowingAndFilteringSlashCommandList() (tea.Model, tea.Cmd)
 			}
 		}
 		if len(ranks) == 0 {
-			PrintToLogFile("len(ranks) == 0 && m.showSlashCommandList")
 			m.showSlashCommandList = false
 			m.selectedSlashCommand = &models.SlashCommand{}
 
@@ -414,7 +409,6 @@ func (m *Model) handleMessageInput() (tea.Model, tea.Cmd) {
 			if err != nil {
 				panic(err)
 			}
-			PrintToLogFile("EXECUTE COMMAND")
 			m.textInput.Reset()
 			m.selectedSlashCommand = &models.SlashCommand{}
 			return m, nil
@@ -431,11 +425,8 @@ func (m *Model) handleMessageInput() (tea.Model, tea.Cmd) {
 func (m *Model) handleMessageSending() (tea.Model, tea.Cmd) {
 	msg := strings.TrimSpace(m.textInput.Value())
 	if msg != "" {
-		PrintToLogFile("m.selectedSlashCommand", m.selectedSlashCommand.Command)
-		PrintToLogFile("MSG", msg)
 		m.sendMessage(msg)
 		m.textInput.Reset()
-		// PrintToLogFile(msg)
 		return m, nil
 	} else {
 		m.textInput.Reset()

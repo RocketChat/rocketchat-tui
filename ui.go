@@ -37,22 +37,10 @@ func (d messageListDelegate) Render(w io.Writer, m list.Model, index int, messag
 	userMessage := lipgloss.NewStyle().Align(lipgloss.Left).Foreground(lipgloss.Color("#ffffff")).MaxWidth(80).Width(80).Render(i.Msg)
 	messageBox := lipgloss.NewStyle().PaddingLeft(1).Render(lipgloss.JoinVertical(lipgloss.Top, userDetails, userMessage))
 
-	// var userMessageBox string
-	// if index == m.Index() {
-	// 	userMessageBox = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), false, false, false, true).BorderBackground(lipgloss.Color("#ffffff")).PaddingBottom(1).Width(80).Render(lipgloss.JoinHorizontal(lipgloss.Left, nameLetterChat, messageBox))
-	// } else {
-	// 	userMessageBox = lipgloss.NewStyle().PaddingBottom(1).Width(80).Render(lipgloss.JoinHorizontal(lipgloss.Left, nameLetterChat, messageBox))
-
-	// }
 	userMessageBox := lipgloss.NewStyle().PaddingBottom(1).Width(80).Render(lipgloss.JoinHorizontal(lipgloss.Left, nameLetterChat, messageBox))
 
-	// messageString = userMessageBox
-	// messageString += userMessageBox + "\n"
-	// fmt.Println(userMessageBox)
 
 	fmt.Fprintf(w, userMessageBox)
-
-	// str := fmt.Sprintf("%d. %s", index+1, i)
 }
 
 type channelsItem models.ChannelSubscription
