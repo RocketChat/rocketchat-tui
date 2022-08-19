@@ -126,7 +126,8 @@ func (m *Model) userLoginBegin() tea.Cmd {
 		m.typing = true
 		m.changeSelectedChannel(0)
 		setSlashCommandsList := m.fetchAllSlashCommands()
-		return tea.Batch(channelCmd, setSlashCommandsList)
+		channelMembersSetCmnd := m.getChannelMembers()
+		return tea.Batch(channelCmd, setSlashCommandsList, channelMembersSetCmnd)
 
 	} else {
 		CreateUpdateCacheEntry("token", "")
@@ -183,8 +184,6 @@ func (m *Model) loadHistory() {
 	}
 
 	m.lastMessageTimestamp = messages[0].Timestamp
-	PrintToLogFile(messages[0].Timestamp)
-	PrintToLogFile("ACTIVE CHANNEL", m.activeChannel.Type, m.activeChannel.Name)
 }
 
 func (m *Model) fetchPastMessages() tea.Cmd {
@@ -380,7 +379,7 @@ func (m *Model) handleShowingAndFilteringSlashCommandList() (tea.Model, tea.Cmd)
 	return m, nil
 }
 
-func (m *Model) handleMessageInput() (tea.Model, tea.Cmd) {
+func (m *Model) handleMessageAndSlashCommandInput() (tea.Model, tea.Cmd) {
 	value := m.textInput.Value()
 	chars := []rune(value)
 
@@ -432,4 +431,125 @@ func (m *Model) handleMessageSending() (tea.Model, tea.Cmd) {
 		m.textInput.Reset()
 		return m, nil
 	}
+}
+
+func (m *Model) getChannelMembers() tea.Cmd {
+	channel := &models.Channel{
+		ID:   m.activeChannel.RoomId,
+		Name: m.activeChannel.Name,
+	}
+
+	resp, err := m.restClient.GetGroupMembers(channel)
+	if err != nil {
+		PrintToLogFile(err, resp)
+		panic(err)
+	}
+
+	var items []list.Item
+	mentionAll := models.User{
+		UserName:     "all",
+		Name:         "Notify all in this room",
+		Status:       "",
+		TokenExpires: 0,
+	}
+	mentionOnline := models.User{
+		UserName:     "here",
+		Name:         "Notify active users in this room",
+		Status:       "",
+		TokenExpires: 0,
+	}
+	items = append(items, channelMembersItem(mentionAll))
+	items = append(items, channelMembersItem(mentionOnline))
+	m.channelMembers = append(m.channelMembers, mentionAll)
+	m.channelMembers = append(m.channelMembers, mentionOnline)
+
+	for _, u := range resp {
+		if u.UserName != "" {
+			items = append(items, channelMembersItem(u))
+			m.channelMembers = append(m.channelMembers, u)
+		}
+	}
+	channelMembersListSetCmnd := m.channelMembersList.SetItems(items)
+	return channelMembersListSetCmnd
+}
+
+func (m *Model) handleShowingChannelMembersList() tea.Cmd {
+	val := m.textInput.Value()
+	chars := []rune(val)
+	cursorCurrentPos := m.textInput.Cursor()
+
+	if m.showChannelMembersList && m.positionOfAtSymbol <= len(val) && m.positionOfAtSymbol != -1 && string(chars[m.positionOfAtSymbol-1]) == "@" {
+		username := stringUsernameExtractor(val, m.positionOfAtSymbol)
+		cmd := m.handleChannelMemberListFiltering(username)
+		return cmd
+
+	} else if m.positionOfAtSymbol == cursorCurrentPos {
+		m.showChannelMembersList = true
+		return nil
+	} else if cursorCurrentPos == 1 && string(chars[0]) == "@" {
+		m.showChannelMembersList = true
+		m.positionOfAtSymbol = 1
+		return nil
+	} else if cursorCurrentPos >= 2 && string(chars[cursorCurrentPos-1]) == "@" && string(chars[cursorCurrentPos-2]) == " " {
+		m.showChannelMembersList = true
+		m.positionOfAtSymbol = cursorCurrentPos
+		return nil
+	} else {
+		m.positionOfAtSymbol = -1
+		m.showChannelMembersList = false
+		return nil
+	}
+}
+
+func (m *Model) handleChannelMemberListFiltering(username string) tea.Cmd {
+	if len(username) == 0 {
+		var items []list.Item
+		for _, u := range m.channelMembers {
+			items = append(items, channelMembersItem(u))
+		}
+		filteredChannelMembersList := m.channelMembersList.SetItems(items)
+		return filteredChannelMembersList
+	}
+	var usernames []string
+	for _, u := range m.channelMembers {
+		usernames = append(usernames, u.UserName)
+	}
+	ranks := m.channelMembersList.Filter(username, usernames)
+	if len(ranks) > 0 {
+		var items []list.Item
+		for _, rank := range ranks {
+			items = append(items, channelMembersItem(m.channelMembers[rank.Index]))
+		}
+		filteredChannelMembersList := m.channelMembersList.SetItems(items)
+		return filteredChannelMembersList
+	} else {
+		var items []list.Item
+		for _, u := range m.channelMembers {
+			items = append(items, channelMembersItem(u))
+		}
+		filteredChannelMembersList := m.channelMembersList.SetItems(items)
+		return filteredChannelMembersList
+	}
+}
+
+func (m *Model) handleSelectingAtChannelMember() tea.Cmd {
+	diff := m.textInput.Cursor() - m.positionOfAtSymbol
+	if m.showChannelMembersList {
+		user, ok := m.channelMembersList.SelectedItem().(channelMembersItem)
+		if ok {
+			userMessageString := usernameAutoCompleteString(m.textInput.Value(), user.UserName+" ", m.positionOfAtSymbol, diff)
+			m.textInput.SetValue(userMessageString)
+			m.textInput.CursorEnd()
+		}
+		m.showChannelMembersList = false
+		m.positionOfAtSymbol = -1
+
+		var items []list.Item
+		for _, u := range m.channelMembers {
+			items = append(items, channelMembersItem(u))
+		}
+		filteredChannelMembersList := m.channelMembersList.SetItems(items)
+		return filteredChannelMembersList
+	}
+	return nil
 }

@@ -36,29 +36,36 @@ type Model struct {
 	password string
 	token    string
 
-	channelList          list.Model
-	messagesList         list.Model
-	slashCommandsList    list.Model
+	channelList        list.Model
+	messagesList       list.Model
+	slashCommandsList  list.Model
+	channelMembersList list.Model
+
+	channelMembers       []models.User
 	slashCommands        []models.SlashCommand
 	selectedSlashCommand *models.SlashCommand
 
 	loginScreen *LoginScreen
 
-	typing               bool
-	loadMorePastMessages bool
-	showSlashCommandList bool
+	typing                 bool
+	loadMorePastMessages   bool
+	showSlashCommandList   bool
+	showChannelMembersList bool
 
-	width  int
-	height int
+	positionOfAtSymbol int
+	width              int
+	height             int
 }
 
 type listKeyMap struct {
-	messageListNextPage             key.Binding
-	messageListPreviousPage         key.Binding
-	channelListNextChannel          key.Binding
-	channelListPreviousChannel      key.Binding
-	slashCommandListNextCommand     key.Binding
-	slashCommandListPreviousCommand key.Binding
+	messageListNextPage              key.Binding
+	messageListPreviousPage          key.Binding
+	channelListNextChannel           key.Binding
+	channelListPreviousChannel       key.Binding
+	slashCommandListNextCommand      key.Binding
+	slashCommandListPreviousCommand  key.Binding
+	channelMembersListNextMember     key.Binding
+	channelMembersListPreviousMember key.Binding
 }
 
 func newListKeyMap() *listKeyMap {
@@ -86,6 +93,14 @@ func newListKeyMap() *listKeyMap {
 		slashCommandListPreviousCommand: key.NewBinding(
 			key.WithKeys("up"),
 			key.WithHelp("up", "Previous Slash Command"),
+		),
+		channelMembersListNextMember: key.NewBinding(
+			key.WithKeys("down"),
+			key.WithHelp("down", "Next Channel Member"),
+		),
+		channelMembersListPreviousMember: key.NewBinding(
+			key.WithKeys("up"),
+			key.WithHelp("up", "Previous Channel Member"),
 		),
 	}
 }
@@ -133,6 +148,7 @@ func IntialModelState() *Model {
 	cl := list.New(items, channelListDelegate{}, w/4-1, 14)
 	msgsList := list.New(items, messageListDelegate{}, 3*w/4-10, 16)
 	slashCmndsList := list.New(items, slashCommandsListDelegate{}, 3*w/4-10, 5)
+	channelMembersList := list.New(items, channelMembersListDelegate{}, 3*w/4-10, 5)
 
 	cl.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
@@ -155,20 +171,30 @@ func IntialModelState() *Model {
 		}
 	}
 
+	channelMembersList.AdditionalFullHelpKeys = func() []key.Binding {
+		return []key.Binding{
+			listKeys.channelMembersListNextMember,
+			listKeys.channelMembersListPreviousMember,
+		}
+	}
+
 	initialModel := &Model{
-		channelList:          cl,
-		keys:                 listKeys,
-		messagesList:         msgsList,
-		slashCommandsList:    slashCmndsList,
-		loginScreen:          intialLoginScreen,
-		textInput:            t,
-		width:                w,
-		height:               h,
-		subscribed:           make(map[string]string),
-		msgChannel:           make(chan models.Message, 100),
-		loadMorePastMessages: false,
-		showSlashCommandList: false,
-		selectedSlashCommand: &models.SlashCommand{},
+		channelList:            cl,
+		keys:                   listKeys,
+		messagesList:           msgsList,
+		slashCommandsList:      slashCmndsList,
+		loginScreen:            intialLoginScreen,
+		textInput:              t,
+		width:                  w,
+		height:                 h,
+		subscribed:             make(map[string]string),
+		msgChannel:             make(chan models.Message, 100),
+		loadMorePastMessages:   false,
+		showSlashCommandList:   false,
+		selectedSlashCommand:   &models.SlashCommand{},
+		channelMembersList:     channelMembersList,
+		showChannelMembersList: false,
+		positionOfAtSymbol:     -1,
 	}
 	return initialModel
 }
@@ -279,6 +305,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case key.Matches(msg, m.keys.slashCommandListPreviousCommand) && m.showSlashCommandList:
 			m.slashCommandsList.CursorUp()
 			return m, nil
+		case key.Matches(msg, m.keys.channelMembersListNextMember) && m.showChannelMembersList:
+			m.channelMembersList.CursorDown()
+			return m, nil
+		case key.Matches(msg, m.keys.channelMembersListPreviousMember) && m.showChannelMembersList:
+			m.channelMembersList.CursorUp()
+			return m, nil
 		}
 
 		switch msg.String() {
@@ -295,7 +327,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			if m.typing {
-				m, cmd := m.handleMessageInput()
+				if m.showChannelMembersList {
+					channelMemberCmd := m.handleSelectingAtChannelMember()
+					return m, channelMemberCmd
+				}
+				m, cmd := m.handleMessageAndSlashCommandInput()
 				return m, cmd
 			}
 		case "esc":
@@ -315,8 +351,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.typing {
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
+		channelMembersCmnd := m.handleShowingChannelMembersList()
 		m, slashCmnd := m.handleShowingAndFilteringSlashCommandList()
-		return m, tea.Batch(cmd, slashCmnd)
+		return m, tea.Batch(cmd, slashCmnd, channelMembersCmnd)
 	}
 
 	var channelCmd tea.Cmd
@@ -328,7 +365,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var slashCmd tea.Cmd
 	m.slashCommandsList, slashCmd = m.slashCommandsList.Update(msg)
 
-	cmds = append(cmds, channelCmd, messageCmd, slashCmd)
+	var channelMembersListCmnd tea.Cmd
+	m.channelMembersList, channelMembersListCmnd = m.channelMembersList.Update(msg)
+
+	cmds = append(cmds, channelCmd, messageCmd, slashCmd, channelMembersListCmnd)
 	return m, tea.Batch(cmds...)
 }
 

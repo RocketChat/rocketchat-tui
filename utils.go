@@ -53,3 +53,23 @@ func CheckForTokenExpiration(tokenExpirationTime string) bool {
 	tokenExpires := time.Unix(0, (i)*int64(time.Millisecond))
 	return today.Before(tokenExpires)
 }
+
+func stringUsernameExtractor(str string, currentPos int) string {
+	length := len(str)
+	chars := []rune(str)
+	word := ""
+	pos := currentPos
+	for pos < length {
+		if string(chars[pos]) != "" && string(chars[pos]) != " " {
+			word += string(chars[pos])
+		} else {
+			break
+		}
+		pos++
+	}
+	return word
+}
+
+func usernameAutoCompleteString(str string, replacement string, index int, jump int) string {
+	return str[:index] + replacement + str[index+jump:]
+}

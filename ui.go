@@ -39,7 +39,6 @@ func (d messageListDelegate) Render(w io.Writer, m list.Model, index int, messag
 
 	userMessageBox := lipgloss.NewStyle().PaddingBottom(1).Width(80).Render(lipgloss.JoinHorizontal(lipgloss.Left, nameLetterChat, messageBox))
 
-
 	fmt.Fprintf(w, userMessageBox)
 }
 
@@ -99,11 +98,56 @@ func (d slashCommandsListDelegate) Render(w io.Writer, m list.Model, index int, 
 
 }
 
+type channelMembersItem models.User
+
+func (i channelMembersItem) FilterValue() string { return i.UserName }
+
+type channelMembersListDelegate struct{}
+
+func (c channelMembersListDelegate) Height() int  { return 1 }
+func (c channelMembersListDelegate) Spacing() int { return 0 }
+func (c channelMembersListDelegate) Update(msg tea.Msg, m *list.Model) tea.Cmd {
+	return nil
+}
+func (c channelMembersListDelegate) Render(w io.Writer, m list.Model, index int, channelMembersListItem list.Item) {
+	i, ok := channelMembersListItem.(channelMembersItem)
+	var activeStatus string
+	if i.Status == "online" {
+		activeStatus = "●"
+	} else if i.Status == "offline" {
+		activeStatus = "○"
+	} else {
+		activeStatus = "◦"
+	}
+	if !ok {
+		return
+	}
+	if i.UserName != "" {
+		var nameLetterChat string
+		if i.Status != "" {
+			nameLetterChat = nameLetterBoxStyle.Copy().MarginLeft(1).Width(3).Render(getStringFirstLetter(i.Name))
+		}
+		userName := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e5e4e2")).Render(i.UserName)
+		name := lipgloss.NewStyle().Foreground(lipgloss.Color("#e5e4e2")).Render(i.Name)
+		channelMemberItem := channelNameStyle.Copy().Bold(false).Align(lipgloss.Left).UnsetPaddingTop().UnsetMarginTop().MaxWidth(120).Render(activeStatus + "   " + nameLetterChat + " " + userName + " " + name)
+		if index == m.Index() {
+			userName := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#119da4")).Render(i.UserName)
+			name := lipgloss.NewStyle().Foreground(lipgloss.Color("#119da4")).Render(i.Name)
+			channelMemberItem = channelNameStyle.Copy().Align(lipgloss.Left).UnsetPaddingTop().UnsetMarginTop().Foreground(lipgloss.Color("#119da4")).Render(activeStatus + "   " + nameLetterChat + " " + userName + " " + name)
+		}
+		fmt.Fprintf(w, channelMemberItem)
+	}
+
+}
+
 func (m *Model) RenderTui() string {
 	cmndboxSpace := 8
 	if m.showSlashCommandList {
 		cmndboxSpace = 13
+	} else if m.showChannelMembersList {
+		cmndboxSpace = 13
 	}
+
 	m.channelList.Title = "CHANNELS"
 	m.channelList.SetShowStatusBar(false)
 	m.channelList.SetFilteringEnabled(false)
@@ -125,6 +169,14 @@ func (m *Model) RenderTui() string {
 	m.slashCommandsList.SetShowStatusBar(false)
 	m.slashCommandsList.SetShowHelp(false)
 	m.slashCommandsList.SetShowPagination(false)
+
+	m.channelMembersList.Title = "MEMBERS"
+	m.channelMembersList.Styles.Title = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#ffffff")).UnsetMargins().UnsetPadding()
+	m.channelMembersList.SetShowFilter(true)
+	m.channelMembersList.SetFilteringEnabled(true)
+	m.channelMembersList.SetShowStatusBar(false)
+	m.channelMembersList.SetShowHelp(false)
+	m.channelMembersList.SetShowPagination(false)
 
 	nameLetter := sidebarTopColumnStyle.Width(m.width / 8).Align(lipgloss.Left).Render(nameLetterBoxStyle.Background(lipgloss.Color("#d1495b")).Bold(true).Render("S"))
 	newChannelButton := sidebarTopColumnStyle.Width(m.width / 8).Align(lipgloss.Right).Render(nameLetterBoxStyle.Background(lipgloss.Color("#13505b")).Render("✍."))
@@ -153,9 +205,11 @@ func (m *Model) RenderTui() string {
 
 	channelConversationScreen := lipgloss.NewStyle().Height(m.height - cmndboxSpace).MaxHeight(m.height - cmndboxSpace).Render(m.messagesList.View())
 
-	slashCommandsBox := ""
+	var smallListBox string
 	if m.showSlashCommandList {
-		slashCommandsBox = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, true, false, true).BorderForeground(lipgloss.Color("#119da4")).Align(lipgloss.Left).Width((3 * m.width / 4) - 4).Render(m.slashCommandsList.View())
+		smallListBox = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, true, false, true).BorderForeground(lipgloss.Color("#119da4")).Align(lipgloss.Left).Width((3 * m.width / 4) - 4).Render(m.slashCommandsList.View())
+	} else if m.showChannelMembersList {
+		smallListBox = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, true, false, true).BorderForeground(lipgloss.Color("#119da4")).Align(lipgloss.Left).Width((3 * m.width / 4) - 4).Render(m.channelMembersList.View())
 	}
 
 	messageEmojiIcon := messageEmojiIconStyle.Render("☺")
@@ -169,7 +223,7 @@ func (m *Model) RenderTui() string {
 
 	channelWindow := lipgloss.Place(3*(m.width/4)-2, m.height-2,
 		lipgloss.Left, lipgloss.Top,
-		channelWindowStyle.Height(m.height-2).Width(3*(m.width/4)).Render(lipgloss.JoinVertical(lipgloss.Top, channelWindowTopbar, channelConversationScreen, slashCommandsBox, channelMessageInputBox)),
+		channelWindowStyle.Height(m.height-2).Width(3*(m.width/4)).Render(lipgloss.JoinVertical(lipgloss.Top, channelWindowTopbar, channelConversationScreen, smallListBox, channelMessageInputBox)),
 	)
 
 	instruction := instructionStyle.Width(m.width).Render("Press Ctrl + C - quit • Ctrl + H - help • Ctrl + Arrows - for navigation in pane • Enter - send message • Ctrl + L - Log out")
