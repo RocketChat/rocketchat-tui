@@ -223,50 +223,9 @@ func (m *Model) Init() tea.Cmd {
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
-	if !m.loginScreen.loggedIn && m.loginScreen.loginScreenState == "showLoginScreen" {
-		switch msg := msg.(type) {
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "ctrl+c":
-				return m, tea.Quit
-			case "tab", "ctrl+down":
-				if m.loginScreen.activeElement < 3 {
-					m.loginScreen.activeElement = m.loginScreen.activeElement + 1
-				} else {
-					m.loginScreen.activeElement = 1
-				}
-			case "enter":
-				m.loginScreen.activeElement = 3
-				if m.email != "" && m.password != "" {
-					err := m.connectFromEmailAndPassword()
-					if err != nil {
-						os.Exit(1)
-					}
-					var cmds []tea.Cmd
-					channelCmd := m.setChannelsInUiList()
-
-					cmds = append(cmds, channelCmd, textinput.Blink)
-					m.loginScreen.loggedIn = true
-					m.changeSelectedChannel(0)
-					return m, tea.Batch(cmds...)
-				}
-			}
-
-		}
-
-		if m.loginScreen.activeElement == 1 {
-			var cmd tea.Cmd
-			m.loginScreen.emailInput, cmd = m.loginScreen.emailInput.Update(msg)
-			m.email = m.loginScreen.emailInput.Value()
-			return m, cmd
-		}
-
-		if m.loginScreen.activeElement == 2 {
-			var cmd tea.Cmd
-			m.loginScreen.passwordInput, cmd = m.loginScreen.passwordInput.Update(msg)
-			m.password = m.loginScreen.passwordInput.Value()
-			return m, cmd
-		}
+	loginScreenUpdateCmd := m.handleLoginScreenUpdate(msg)
+	if loginScreenUpdateCmd != nil {
+		return m, loginScreenUpdateCmd
 	}
 
 	switch msg := msg.(type) {

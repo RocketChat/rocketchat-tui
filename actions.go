@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/textinput"
 
 	"github.com/RocketChat/Rocket.Chat.Go.SDK/models"
 	"github.com/RocketChat/Rocket.Chat.Go.SDK/realtime"
@@ -565,4 +566,56 @@ func userNameInMsgHighlighter(msg string) string {
 		}
 	}
 	return ""
+}
+
+func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
+	if !m.loginScreen.loggedIn && m.loginScreen.loginScreenState == "showLoginScreen" {
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "ctrl+c":
+				return tea.Quit
+			case "tab", "ctrl+down":
+				if m.loginScreen.activeElement < 3 {
+					m.loginScreen.activeElement = m.loginScreen.activeElement + 1
+				} else {
+					m.loginScreen.activeElement = 1
+				}
+				return nil
+			case "enter":
+				m.loginScreen.activeElement = 3
+				if m.email != "" && m.password != "" {
+					err := m.connectFromEmailAndPassword()
+					if err != nil {
+						os.Exit(1)
+					}
+					var cmds []tea.Cmd
+					channelCmd := m.setChannelsInUiList()
+					m.loginScreen.loggedIn = true
+					m.changeSelectedChannel(0)
+					m.typing = true
+					setSlashCommandsList := m.fetchAllSlashCommands()
+					channelMembersSetCmnd := m.getChannelMembers()
+					cmds = append(cmds, channelCmd, textinput.Blink, setSlashCommandsList, channelMembersSetCmnd)
+					return tea.Batch(cmds...)
+				}
+			}
+
+		}
+
+		if m.loginScreen.activeElement == 1 {
+			var cmd tea.Cmd
+			m.loginScreen.emailInput, cmd = m.loginScreen.emailInput.Update(msg)
+			m.email = m.loginScreen.emailInput.Value()
+			return cmd
+		}
+
+		if m.loginScreen.activeElement == 2 {
+			var cmd tea.Cmd
+			m.loginScreen.passwordInput, cmd = m.loginScreen.passwordInput.Update(msg)
+			m.password = m.loginScreen.passwordInput.Value()
+			return cmd
+		}
+	}
+	return nil
 }
