@@ -1,7 +1,6 @@
 package main
 
 import (
-	// "encoding/json"
 	"log"
 	"net/url"
 	"os"
@@ -552,4 +551,18 @@ func (m *Model) handleSelectingAtChannelMember() tea.Cmd {
 		return filteredChannelMembersList
 	}
 	return nil
+}
+
+func userNameInMsgHighlighter(msg string) string {
+	if len(msg) == 0 {
+		return msg
+	}
+	str := strings.Split(msg, " ")
+	for _, v := range str {
+		word := []rune(v)
+		if len(word) > 0 && string(word[0]) == "@" {
+			// isUserInChannel := doesUserExistInChannel()
+		}
+	}
+	return ""
 }

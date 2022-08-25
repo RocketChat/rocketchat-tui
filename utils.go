@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	// "github.com/RocketChat/Rocket.Chat.Go.SDK/models"
+	"github.com/RocketChat/Rocket.Chat.Go.SDK/models"
 	"github.com/joho/godotenv"
 )
 
@@ -72,4 +72,13 @@ func stringUsernameExtractor(str string, currentPos int) string {
 
 func usernameAutoCompleteString(str string, replacement string, index int, jump int) string {
 	return str[:index] + replacement + str[index+jump:]
+}
+
+func doesUserExistInChannel(channelMembers []models.User, username string) int {
+	for i := range channelMembers {
+		if channelMembers[i].UserName == username {
+			return 1
+		}
+	}
+	return -1
 }
