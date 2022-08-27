@@ -623,16 +623,16 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 
 func (m *Model) handleUpdateOnKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
-	case key.Matches(msg, m.keys.channelListNextChannel):
+	case key.Matches(msg, m.keys.ChannelListNextChannel):
 		m.channelList.CursorDown()
 		return m, nil
-	case key.Matches(msg, m.keys.channelListPreviousChannel):
+	case key.Matches(msg, m.keys.ChannelListPreviousChannel):
 		m.channelList.CursorUp()
 		return m, nil
-	case key.Matches(msg, m.keys.messageListNextPage):
+	case key.Matches(msg, m.keys.MessageListNextPage):
 		m.messagesList.Paginator.NextPage()
 		return m, nil
-	case key.Matches(msg, m.keys.messageListPreviousPage):
+	case key.Matches(msg, m.keys.MessageListPreviousPage):
 		m.messagesList.Paginator.PrevPage()
 		if m.messagesList.Paginator.Page == 0 && m.loadMorePastMessages {
 			m.loadMorePastMessages = false
@@ -643,21 +643,21 @@ func (m *Model) handleUpdateOnKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.loadMorePastMessages = true
 		}
 		return m, nil
-	case key.Matches(msg, m.keys.slashCommandListNextCommand) && m.showSlashCommandList:
+	case key.Matches(msg, m.keys.SlashCommandListNextCommand) && m.showSlashCommandList:
 		m.slashCommandsList.CursorDown()
 		return m, nil
-	case key.Matches(msg, m.keys.slashCommandListPreviousCommand) && m.showSlashCommandList:
+	case key.Matches(msg, m.keys.SlashCommandListPreviousCommand) && m.showSlashCommandList:
 		m.slashCommandsList.CursorUp()
 		return m, nil
-	case key.Matches(msg, m.keys.channelMembersListNextMember) && m.showChannelMembersList:
+	case key.Matches(msg, m.keys.ChannelMembersListNextMember) && m.showChannelMembersList:
 		m.channelMembersList.CursorDown()
 		return m, nil
-	case key.Matches(msg, m.keys.channelMembersListPreviousMember) && m.showChannelMembersList:
+	case key.Matches(msg, m.keys.ChannelMembersListPreviousMember) && m.showChannelMembersList:
 		m.channelMembersList.CursorUp()
 		return m, nil
-	case key.Matches(msg, m.keys.quitAndCloseTui):
+	case key.Matches(msg, m.keys.QuitAndCloseTui):
 		return m, tea.Quit
-	case key.Matches(msg, m.keys.selectByEnterKeyPress):
+	case key.Matches(msg, m.keys.SelectByEnterKeyPress):
 		if !m.typing {
 			m.typing = true
 			var msgItems []list.Item
@@ -675,10 +675,10 @@ func (m *Model) handleUpdateOnKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m, cmd := m.handleMessageAndSlashCommandInput()
 			return m, cmd
 		}
-	case key.Matches(msg, m.keys.messageTypingInactive):
+	case key.Matches(msg, m.keys.MessageTypingInactive):
 		m.typing = !m.typing
 		return m, nil
-	case key.Matches(msg, m.keys.logOutTui):
+	case key.Matches(msg, m.keys.LogOutTui):
 		m, cmd := m.handleUserLogOut()
 		return m, cmd
 	}
