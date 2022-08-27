@@ -591,12 +591,13 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 					}
 					var cmds []tea.Cmd
 					channelCmd := m.setChannelsInUiList()
+					cmd := m.waitForIncomingMessage(m.msgChannel)
 					m.loginScreen.loggedIn = true
 					m.changeSelectedChannel(0)
 					m.typing = true
 					setSlashCommandsList := m.fetchAllSlashCommands()
 					channelMembersSetCmnd := m.getChannelMembers()
-					cmds = append(cmds, channelCmd, textinput.Blink, setSlashCommandsList, channelMembersSetCmnd)
+					cmds = append(cmds, channelCmd, textinput.Blink, setSlashCommandsList, channelMembersSetCmnd, cmd)
 					return tea.Batch(cmds...)
 				}
 			}
