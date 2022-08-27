@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 
@@ -52,7 +53,6 @@ func (m *Model) connectFromEmailAndPassword() error {
 	m.loginScreen.loggedIn = true
 	m.loginScreen.loginScreenState = "showTui"
 
-	PrintToLogFile(user)
 
 	// log.Println("BINGO!\nYou are In....")
 	m.getSubscriptions()
@@ -618,4 +618,75 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+func (m *Model) handleUpdateOnKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.channelListNextChannel):
+		m.channelList.CursorDown()
+		return m, nil
+	case key.Matches(msg, m.keys.channelListPreviousChannel):
+		m.channelList.CursorUp()
+		return m, nil
+	case key.Matches(msg, m.keys.messageListNextPage):
+		m.messagesList.Paginator.NextPage()
+		return m, nil
+	case key.Matches(msg, m.keys.messageListPreviousPage):
+		m.messagesList.Paginator.PrevPage()
+		if m.messagesList.Paginator.Page == 0 && m.loadMorePastMessages {
+			m.loadMorePastMessages = false
+			msgsCmd := m.fetchPastMessages()
+			return m, msgsCmd
+		}
+		if m.messagesList.Paginator.Page == 0 {
+			m.loadMorePastMessages = true
+		}
+		return m, nil
+	case key.Matches(msg, m.keys.slashCommandListNextCommand) && m.showSlashCommandList:
+		m.slashCommandsList.CursorDown()
+		return m, nil
+	case key.Matches(msg, m.keys.slashCommandListPreviousCommand) && m.showSlashCommandList:
+		m.slashCommandsList.CursorUp()
+		return m, nil
+	case key.Matches(msg, m.keys.channelMembersListNextMember) && m.showChannelMembersList:
+		m.channelMembersList.CursorDown()
+		return m, nil
+	case key.Matches(msg, m.keys.channelMembersListPreviousMember) && m.showChannelMembersList:
+		m.channelMembersList.CursorUp()
+		return m, nil
+	case key.Matches(msg, m.keys.quitAndCloseTui):
+		return m, tea.Quit
+	case key.Matches(msg, m.keys.selectByEnterKeyPress):
+		if !m.typing {
+			m.typing = true
+			var msgItems []list.Item
+			cmd := m.messagesList.SetItems(msgItems)
+			m.changeSelectedChannel(m.channelList.Index())
+			m.loadMorePastMessages = false
+			return m, cmd
+		}
+
+		if m.typing {
+			if m.showChannelMembersList {
+				channelMemberCmd := m.handleSelectingAtChannelMember()
+				return m, channelMemberCmd
+			}
+			m, cmd := m.handleMessageAndSlashCommandInput()
+			return m, cmd
+		}
+	case key.Matches(msg, m.keys.messageTypingInactive):
+		m.typing = !m.typing
+		return m, nil
+	case key.Matches(msg, m.keys.logOutTui):
+		m, cmd := m.handleUserLogOut()
+		return m, cmd
+	}
+	if m.typing {
+		var cmd tea.Cmd
+		m.textInput, cmd = m.textInput.Update(msg)
+		channelMembersCmnd := m.handleShowingChannelMembersList()
+		m, slashCmnd := m.handleShowingAndFilteringSlashCommandList()
+		return m, tea.Batch(cmd, slashCmnd, channelMembersCmnd)
+	}
+	return m, nil
 }

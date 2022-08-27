@@ -66,6 +66,10 @@ type listKeyMap struct {
 	slashCommandListPreviousCommand  key.Binding
 	channelMembersListNextMember     key.Binding
 	channelMembersListPreviousMember key.Binding
+	quitAndCloseTui                  key.Binding
+	selectByEnterKeyPress            key.Binding
+	messageTypingInactive            key.Binding
+	logOutTui                        key.Binding
 }
 
 func newListKeyMap() *listKeyMap {
@@ -101,6 +105,22 @@ func newListKeyMap() *listKeyMap {
 		channelMembersListPreviousMember: key.NewBinding(
 			key.WithKeys("up"),
 			key.WithHelp("up", "Previous Channel Member"),
+		),
+		quitAndCloseTui: key.NewBinding(
+			key.WithKeys("ctrl+c"),
+			key.WithHelp("ctrl+c", "Quit from Tui"),
+		),
+		selectByEnterKeyPress: key.NewBinding(
+			key.WithKeys("enter"),
+			key.WithHelp("enter", "To select channel and send message"),
+		),
+		messageTypingInactive: key.NewBinding(
+			key.WithKeys("esc"),
+			key.WithHelp("esc", "Inactive message typing input"),
+		),
+		logOutTui: key.NewBinding(
+			key.WithKeys("ctrl+l"),
+			key.WithHelp("ctrl+l", "Log out profile from Tui"),
 		),
 	}
 }
@@ -222,6 +242,7 @@ func (m *Model) Init() tea.Cmd {
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
+	var channelCmd, messageCmd, slashCmd, channelMembersListCmnd tea.Cmd
 
 	loginScreenUpdateCmd := m.handleLoginScreenUpdate(msg)
 	if loginScreenUpdateCmd != nil {
@@ -237,69 +258,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.waitForIncomingMessage(m.msgChannel), cmd)
 
 	case tea.KeyMsg:
-		switch {
-		case key.Matches(msg, m.keys.channelListNextChannel):
-			m.channelList.CursorDown()
-			return m, nil
-		case key.Matches(msg, m.keys.channelListPreviousChannel):
-			m.channelList.CursorUp()
-			return m, nil
-		case key.Matches(msg, m.keys.messageListNextPage):
-			m.messagesList.Paginator.NextPage()
-			return m, nil
-		case key.Matches(msg, m.keys.messageListPreviousPage):
-			m.messagesList.Paginator.PrevPage()
-			if m.messagesList.Paginator.Page == 0 && m.loadMorePastMessages {
-				m.loadMorePastMessages = false
-				msgsCmd := m.fetchPastMessages()
-				return m, msgsCmd
-			}
-			if m.messagesList.Paginator.Page == 0 {
-				m.loadMorePastMessages = true
-			}
-			return m, nil
-		case key.Matches(msg, m.keys.slashCommandListNextCommand) && m.showSlashCommandList:
-			m.slashCommandsList.CursorDown()
-			return m, nil
-		case key.Matches(msg, m.keys.slashCommandListPreviousCommand) && m.showSlashCommandList:
-			m.slashCommandsList.CursorUp()
-			return m, nil
-		case key.Matches(msg, m.keys.channelMembersListNextMember) && m.showChannelMembersList:
-			m.channelMembersList.CursorDown()
-			return m, nil
-		case key.Matches(msg, m.keys.channelMembersListPreviousMember) && m.showChannelMembersList:
-			m.channelMembersList.CursorUp()
-			return m, nil
-		}
-
-		switch msg.String() {
-		case "ctrl+c":
-			return m, tea.Quit
-		case "enter":
-			if !m.typing {
-				m.typing = true
-				var msgItems []list.Item
-				cmd := m.messagesList.SetItems(msgItems)
-				m.changeSelectedChannel(m.channelList.Index())
-				m.loadMorePastMessages = false
-				return m, cmd
-			}
-
-			if m.typing {
-				if m.showChannelMembersList {
-					channelMemberCmd := m.handleSelectingAtChannelMember()
-					return m, channelMemberCmd
-				}
-				m, cmd := m.handleMessageAndSlashCommandInput()
-				return m, cmd
-			}
-		case "esc":
-			m.typing = false
-			return m, nil
-		case "ctrl+l", "ctrl+L":
-			m, cmd := m.handleUserLogOut()
-			return m, cmd
-		}
+		m, cmd := m.handleUpdateOnKeyPress(msg)
+		return m, cmd
 
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
@@ -307,24 +267,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if m.typing {
-		var cmd tea.Cmd
-		m.textInput, cmd = m.textInput.Update(msg)
-		channelMembersCmnd := m.handleShowingChannelMembersList()
-		m, slashCmnd := m.handleShowingAndFilteringSlashCommandList()
-		return m, tea.Batch(cmd, slashCmnd, channelMembersCmnd)
-	}
-
-	var channelCmd tea.Cmd
 	m.channelList, channelCmd = m.channelList.Update(msg)
 
-	var messageCmd tea.Cmd
 	m.messagesList, messageCmd = m.messagesList.Update(msg)
 
-	var slashCmd tea.Cmd
 	m.slashCommandsList, slashCmd = m.slashCommandsList.Update(msg)
 
-	var channelMembersListCmnd tea.Cmd
 	m.channelMembersList, channelMembersListCmnd = m.channelMembersList.Update(msg)
 
 	cmds = append(cmds, channelCmd, messageCmd, slashCmd, channelMembersListCmnd)
