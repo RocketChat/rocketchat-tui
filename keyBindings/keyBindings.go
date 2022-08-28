@@ -21,11 +21,11 @@ func NewListKeyMap() *ListKeyMap {
 	return &ListKeyMap{
 		MessageListNextPage: key.NewBinding(
 			key.WithKeys("ctrl+right"),
-			key.WithHelp("ctrl+right", "Next Message Page"),
+			key.WithHelp("ctrl+right", "Next Messages Page"),
 		),
 		MessageListPreviousPage: key.NewBinding(
 			key.WithKeys("ctrl+left"),
-			key.WithHelp("ctrl+left", "Previous Message Page"),
+			key.WithHelp("ctrl+left", "Previous Messages Page"),
 		),
 		ChannelListNextChannel: key.NewBinding(
 			key.WithKeys("ctrl+down"),
