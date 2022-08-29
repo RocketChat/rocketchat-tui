@@ -3,7 +3,6 @@ package ui
 import (
 	"log"
 	"net/url"
-	"os"
 	"strconv"
 
 	"github.com/RocketChat/Rocket.Chat.Go.SDK/models"
@@ -110,7 +109,12 @@ func (m *Model) userLoginBegin() tea.Cmd {
 		m.token = token
 		err := m.connectFromToken()
 		if err != nil {
-			os.Exit(1)
+			log.Println("Error occurred while login from token", err)
+			cache.CreateUpdateCacheEntry("token", "")
+			cache.CreateUpdateCacheEntry("tokenExpires", "")
+			m.loginScreen.loginScreenState = "showLoginScreen"
+			m.loginScreen.loggedIn = false
+			return nil
 		}
 		channelCmd := m.setChannelsInUiList()
 		m.typing = true
