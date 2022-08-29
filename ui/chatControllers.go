@@ -233,6 +233,7 @@ func (m *Model) handleChannelMemberListFiltering(username string) tea.Cmd {
 			items = append(items, ChannelMembersItem(u))
 		}
 		filteredChannelMembersList := m.channelMembersList.SetItems(items)
+		m.showChannelMembersList = false
 		return filteredChannelMembersList
 	}
 }
