@@ -1,32 +1,12 @@
 package ui
 
 import (
-	"log"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/RocketChat/Rocket.Chat.Go.SDK/models"
-	"github.com/joho/godotenv"
 )
-
-func goDotEnvVariable(key string) string {
-
-	// load .env file
-	err := godotenv.Load(".env")
-
-	if err != nil {
-		log.Fatalf("Error loading .env file")
-	}
-
-	return os.Getenv(key)
-}
-
-func getServerUrl() string {
-	DEV_SERVER_URL := goDotEnvVariable("DEV_SERVER_URL")
-	return DEV_SERVER_URL
-}
 
 func getStringFirstLetter(str string) string {
 	letter := "U"

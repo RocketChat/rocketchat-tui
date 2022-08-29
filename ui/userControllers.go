@@ -16,7 +16,7 @@ import (
 
 func (m *Model) connectFromEmailAndPassword() error {
 
-	sUrl := getServerUrl()
+	sUrl := m.serverUrl
 	serverUrl, err := url.Parse(sUrl)
 	if err != nil {
 		return err
@@ -56,7 +56,7 @@ func (m *Model) connectFromEmailAndPassword() error {
 
 func (m *Model) connectFromToken() error {
 
-	sUrl := getServerUrl()
+	sUrl := m.serverUrl
 	serverUrl, err := url.Parse(sUrl)
 	if err != nil {
 		return err
@@ -148,7 +148,8 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 				if m.email != "" && m.password != "" {
 					err := m.connectFromEmailAndPassword()
 					if err != nil {
-						os.Exit(1)
+						log.Println("Error occurred while login from email", err)
+						panic(err)
 					}
 					var cmds []tea.Cmd
 					channelCmd := m.setChannelsInUiList()
@@ -182,7 +183,8 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 }
 
 func (m *Model) handleUserLogOut() (tea.Model, tea.Cmd) {
-	m = IntialModelState()
+	sUrl := m.serverUrl
+	m = IntialModelState(sUrl)
 	m.loginScreen.passwordInput.Reset()
 	m.loginScreen.emailInput.Reset()
 	m.email = ""

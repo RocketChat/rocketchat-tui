@@ -34,9 +34,10 @@ type Model struct {
 	activeChannel        models.ChannelSubscription
 	lastMessageTimestamp *time.Time
 
-	email    string
-	password string
-	token    string
+	email     string
+	password  string
+	token     string
+	serverUrl string
 
 	channelList        list.Model
 	messagesList       list.Model
@@ -68,7 +69,7 @@ type LoginScreen struct {
 	clickLoginButton bool
 }
 
-func IntialModelState() *Model {
+func IntialModelState(sUrl string) *Model {
 	w, h, err := term.GetSize(0)
 	if err != nil {
 		return nil
@@ -155,6 +156,7 @@ func IntialModelState() *Model {
 		channelMembersList:     channelMembersList,
 		showChannelMembersList: false,
 		positionOfAtSymbol:     -1,
+		serverUrl:              sUrl,
 	}
 	return initialModel
 }
