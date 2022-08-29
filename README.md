@@ -16,10 +16,12 @@ Prerequisites:
 - Make a `.env` file in the project root directory and add below code in it.
 
     ```
+    PROD_SERVER_URL=https://community.liaison.rocketchat.digital
     DEV_SERVER_URL=http://localhost:3000
     ```
 - Now in the RocketChat TUI root folder run `go run main.go -debug` to run the TUI.
-- we have to pass `-debug` flag so that it logs log statements in `debug.log` file.
+- We have to pass `-debug` flag so that it logs log statements in `debug.log` file.
+- To use production server pass `-prod` flag too while running `main.go`. It will use the production server.
 - Hopefully you will see the TUI running.
 - Enter your email and password. Press Enter.
 
