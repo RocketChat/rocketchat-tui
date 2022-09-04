@@ -11,6 +11,13 @@ import (
 	"github.com/joho/godotenv"
 )
 
+var (
+	debug bool
+	prod  bool
+	url   string
+)
+
+// To load environment variables from .env file
 func initialiseEnvVariable() error {
 	err := godotenv.Load(".env")
 	if err != nil {
@@ -19,7 +26,12 @@ func initialiseEnvVariable() error {
 	return nil
 }
 
-func createModel(debug bool, prod bool) (*ui.Model, *os.File) {
+// It will check for flag arguments.
+// If debug flag is set true all logs will be written in debug.log file.
+// If prod flag is set true TUI will use Production server url for all rest and realtime function calls.
+// If connection url is provided while starting TUI as flag value use that URL.
+// Server Url is set in the model state and intial model state of the TUI will be returned for Tea to start TUI
+func createModel() (*ui.Model, *os.File) {
 	var loggerFile *os.File
 	var err error
 	var sUrl string
@@ -32,33 +44,42 @@ func createModel(debug bool, prod bool) (*ui.Model, *os.File) {
 	}
 	if prod {
 		sUrl = os.Getenv("PROD_SERVER_URL")
+	} else if url != "" {
+		sUrl = url
 	} else {
 		sUrl = os.Getenv("DEV_SERVER_URL")
 	}
 	return ui.IntialModelState(sUrl), loggerFile
 }
 
+// It intialises environment variables to pick them from .env file.
+// It defines all the flags and parse their values.
+// Initial model state with all required methods is used to start the TUI..
 func main() {
 	err := initialiseEnvVariable()
 	if err != nil {
 		log.Println("Environment variable file not found", err)
 		panic(err)
 	}
-	
-	debug := flag.Bool(
+
+	flag.BoolVar(&debug,
 		"debug",
 		false,
 		"passing this flag will allow writing debug output to debug.log",
 	)
-
-	prod := flag.Bool(
+	flag.BoolVar(&prod,
 		"prod",
 		false,
 		"passing this flag will use production server url for connecting",
 	)
+	flag.StringVar(&url,
+		"url",
+		"",
+		"user can pass sever url in it default is loacalhost",
+	)
 	flag.Parse()
 
-	model, logger := createModel(*debug, *prod)
+	model, logger := createModel()
 	if logger != nil {
 		defer logger.Close()
 	}
