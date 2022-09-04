@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"log"
 	"net/url"
 	"strings"
@@ -12,13 +13,26 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (m *Model) fetchAllSlashCommands() tea.Cmd {
+// It is used to fetch available slash commands to list them in the UI.
+// It supports the offset, count and Sort Query Parameters.
+func (m *Model) fetchAllSlashCommands() ([]models.SlashCommand, error) {
 	params := url.Values{}
 	params.Add("offset", "0")
 	resp, err := m.restClient.GetSlashCommandsList(params)
 	if err != nil {
 		log.Println(err, resp)
-		panic(err)
+		return nil, err
+	}
+	return resp, nil
+}
+
+// It is used to set available slash commands in the model state.
+// It is also used to set those commands in the slash commands list so that it can be rendered in the UI.
+func (m *Model) setSlashCommandsList() tea.Cmd {
+	resp, err := m.fetchAllSlashCommands()
+	if err != nil {
+		log.Println(err)
+		return nil
 	}
 	var items []list.Item
 	m.slashCommands = resp
@@ -31,6 +45,8 @@ func (m *Model) fetchAllSlashCommands() tea.Cmd {
 	return slashCommandsList
 }
 
+// It is used to execute a slash command.
+// It room id of the subscribed channel, command and params are required to execute it.
 func (m *Model) executeSlashCommand(cmnd string, params string) error {
 	resp, err := m.restClient.ExecuteSlashCommand(&m.activeChannel, cmnd, params)
 	if err != nil {
@@ -40,7 +56,51 @@ func (m *Model) executeSlashCommand(cmnd string, params string) error {
 	return nil
 }
 
-func (m *Model) handleShowingAndFilteringSlashCommandList() (tea.Model, tea.Cmd) {
+// It is used to filter list of  slash command while typing them.
+// Bubble tea provides Filter function which will give us ranks of matching items through fuzzy search by default and their Index in the original list.
+// Index obtained from the ranks are used to make list of slash commands as per ranking and then showing  that list in the TUI.
+// If user typed command doesn't match any in the slash commands list ranks array will have zero elements and hence we will update the list with the original slash commands.
+func (m *Model) handleFilteringSlashCommandList(val string) (tea.Model, tea.Cmd) {
+	var slashCmnds []string
+	for _, c := range m.slashCommands {
+		slashCmnds = append(slashCmnds, c.Command)
+	}
+	splittedString := strings.Split(val, "/")
+	typedCmnd := strings.Split(splittedString[1], " ")
+	ranks := m.slashCommandsList.Filter(typedCmnd[0], slashCmnds)
+	if typedCmnd[0] != m.selectedSlashCommand.Command && len(ranks) != 0 {
+		m.showSlashCommandList = true
+		if len(ranks) > 0 {
+			var items []list.Item
+			for _, rank := range ranks {
+				items = append(items, SlashCommandsItem(m.slashCommands[rank.Index]))
+			}
+			slashCommandsList := m.slashCommandsList.SetItems(items)
+			return m, slashCommandsList
+		}
+	}
+	if len(ranks) == 0 {
+		m.showSlashCommandList = false
+		m.selectedSlashCommand = &models.SlashCommand{}
+
+		var items []list.Item
+		for _, cmd := range m.slashCommands {
+			if cmd.Command != "" {
+				items = append(items, SlashCommandsItem(cmd))
+			}
+		}
+		slashCommandsList := m.slashCommandsList.SetItems(items)
+		return m, slashCommandsList
+	} else {
+		return m, nil
+	}
+}
+
+// It will handle when to show slash command list.
+// Slash command list should appear when first textinput character is '/' and character just after it is not space.
+// If the typed slash command is present in filtered slash command list, list will be shown. If not we will hide not display list.
+// In all other casese when user is typing message we will not show slash command list.
+func (m *Model) handleShowingSlashCommandList() (tea.Model, tea.Cmd) {
 	val := m.textInput.Value()
 	chars := []rune(val)
 
@@ -49,37 +109,8 @@ func (m *Model) handleShowingAndFilteringSlashCommandList() (tea.Model, tea.Cmd)
 		return m, nil
 	}
 	if len(chars) > 1 && string(chars[0]) == "/" && string(chars[1]) != " " {
-		var slashCmnds []string
-		for _, c := range m.slashCommands {
-			slashCmnds = append(slashCmnds, c.Command)
-		}
-		splittedString := strings.Split(val, "/")
-		typedCmnd := strings.Split(splittedString[1], " ")
-		ranks := m.slashCommandsList.Filter(typedCmnd[0], slashCmnds)
-		if typedCmnd[0] != m.selectedSlashCommand.Command {
-			m.showSlashCommandList = true
-			if len(ranks) > 0 {
-				var items []list.Item
-				for _, rank := range ranks {
-					items = append(items, SlashCommandsItem(m.slashCommands[rank.Index]))
-				}
-				slashCommandsList := m.slashCommandsList.SetItems(items)
-				return m, slashCommandsList
-			}
-		}
-		if len(ranks) == 0 {
-			m.showSlashCommandList = false
-			m.selectedSlashCommand = &models.SlashCommand{}
-
-			var items []list.Item
-			for _, cmd := range m.slashCommands {
-				if cmd.Command != "" {
-					items = append(items, SlashCommandsItem(cmd))
-				}
-			}
-			slashCommandsList := m.slashCommandsList.SetItems(items)
-			return m, slashCommandsList
-		}
+		m, slashCommandsListCmd := m.handleFilteringSlashCommandList(val)
+		return m, slashCommandsListCmd
 	} else {
 		m.showSlashCommandList = false
 		m.selectedSlashCommand = &models.SlashCommand{}
@@ -93,9 +124,10 @@ func (m *Model) handleShowingAndFilteringSlashCommandList() (tea.Model, tea.Cmd)
 		slashCommandsList := m.slashCommandsList.SetItems(items)
 		return m, slashCommandsList
 	}
-	return m, nil
 }
 
+// It will select slash command and set selected slash command in model state.
+// When user again press enter and has not change selected slash command that slash command will be executed in all other cases normal message will be sent.
 func (m *Model) handleMessageAndSlashCommandInput() (tea.Model, tea.Cmd) {
 	value := m.textInput.Value()
 	chars := []rune(value)
@@ -116,7 +148,7 @@ func (m *Model) handleMessageAndSlashCommandInput() (tea.Model, tea.Cmd) {
 		m.showSlashCommandList = false
 		return m, nil
 	}
-	if len(chars) > 1 && string(chars[0]) == "/" && string(chars[1]) != " " {
+	if len(chars) > 1 && string(chars[0]) == "/" && string(chars[1]) != " " && m.selectedSlashCommand.Command != "" {
 		splittedString := strings.Split(value, "/")
 		typedCmnd := strings.Split(splittedString[1], " ")
 		if typedCmnd[0] == m.selectedSlashCommand.Command {
@@ -128,17 +160,14 @@ func (m *Model) handleMessageAndSlashCommandInput() (tea.Model, tea.Cmd) {
 			m.textInput.Reset()
 			m.selectedSlashCommand = &models.SlashCommand{}
 			return m, nil
-		} else {
-			m, cmd := m.handleMessageSending()
-			return m, cmd
 		}
-	} else {
-		m, cmd := m.handleMessageSending()
-		return m, cmd
 	}
+	m.handleMessageSending()
+	return m, nil
 }
 
-func (m *Model) getChannelMembers() tea.Cmd {
+// It is used fetch list of members in a channel or group
+func (m *Model) fetchChannelMembers() ([]models.User, error) {
 	channel := &models.Channel{
 		ID:   m.activeChannel.RoomId,
 		Name: m.activeChannel.Name,
@@ -146,10 +175,19 @@ func (m *Model) getChannelMembers() tea.Cmd {
 
 	resp, err := m.restClient.GetGroupMembers(channel)
 	if err != nil {
-		log.Println(err, resp)
-		panic(err)
+		return nil, err
 	}
+	return resp, nil
+}
 
+// It is used tob set channel members in the list which will be used for @ mentioning.
+// As we use 'all' and 'here' too in mentioning it is also added in the list.
+func (m *Model) setChannelMembersList() tea.Cmd {
+	resp, err := m.fetchChannelMembers()
+	if err != nil {
+		log.Println(err, resp)
+		return nil
+	}
 	var items []list.Item
 	mentionAll := models.User{
 		UserName:     "all",
@@ -163,10 +201,8 @@ func (m *Model) getChannelMembers() tea.Cmd {
 		Status:       "",
 		TokenExpires: 0,
 	}
-	items = append(items, ChannelMembersItem(mentionAll))
-	items = append(items, ChannelMembersItem(mentionOnline))
-	m.channelMembers = append(m.channelMembers, mentionAll)
-	m.channelMembers = append(m.channelMembers, mentionOnline)
+	items = append(items, ChannelMembersItem(mentionAll), ChannelMembersItem(mentionOnline))
+	m.channelMembers = append(m.channelMembers, mentionAll, mentionOnline)
 
 	for _, u := range resp {
 		if u.UserName != "" {
@@ -183,26 +219,31 @@ func (m *Model) handleShowingChannelMembersList() tea.Cmd {
 	chars := []rune(val)
 	cursorCurrentPos := m.textInput.Cursor()
 
-	if m.showChannelMembersList && m.positionOfAtSymbol <= len(val) && m.positionOfAtSymbol != -1 && string(chars[m.positionOfAtSymbol-1]) == "@" {
+	if m.showChannelMembersList &&
+		m.positionOfAtSymbol <= len(val) &&
+		m.positionOfAtSymbol != -1 &&
+		cursorCurrentPos >= 1 &&
+		string(chars[cursorCurrentPos-1]) != " " { // To filter list only when showing of list is true and position of '@' symbol is less than equal to length of input string (edge case is when '@' is at first position - index will be out of range) and position of '@' symbol is not -1 and cursor current position is greater than equal one and user has not pressed space while entering name for filtering
 		username := stringUsernameExtractor(val, m.positionOfAtSymbol)
 		cmd := m.handleChannelMemberListFiltering(username)
 		return cmd
-
-	} else if m.positionOfAtSymbol == cursorCurrentPos {
-		m.showChannelMembersList = true
-		return nil
-	} else if cursorCurrentPos == 1 && string(chars[0]) == "@" {
+	} else if cursorCurrentPos == 1 && string(chars[0]) == "@" { // When '@' is at first position of input string
 		m.showChannelMembersList = true
 		m.positionOfAtSymbol = 1
 		return nil
-	} else if cursorCurrentPos >= 2 && string(chars[cursorCurrentPos-1]) == "@" && string(chars[cursorCurrentPos-2]) == " " {
+	} else if cursorCurrentPos >= 2 && string(chars[cursorCurrentPos-1]) == "@" && string(chars[cursorCurrentPos-2]) == " " { // When '@' is at position other than first just after space
 		m.showChannelMembersList = true
 		m.positionOfAtSymbol = cursorCurrentPos
 		return nil
-	} else {
+	} else { // In all other case don't show list, add original members in the list
 		m.positionOfAtSymbol = -1
+		var items []list.Item
+		for _, u := range m.channelMembers {
+			items = append(items, ChannelMembersItem(u))
+		}
+		filteredChannelMembersList := m.channelMembersList.SetItems(items)
 		m.showChannelMembersList = false
-		return nil
+		return filteredChannelMembersList
 	}
 }
 
@@ -245,7 +286,7 @@ func (m *Model) handleSelectingAtChannelMember() tea.Cmd {
 		if ok {
 			userMessageString := usernameAutoCompleteString(m.textInput.Value(), user.UserName+" ", m.positionOfAtSymbol, diff)
 			m.textInput.SetValue(userMessageString)
-			m.textInput.CursorEnd()
+			m.textInput.SetCursor(m.positionOfAtSymbol + len(user.UserName))
 		}
 		m.showChannelMembersList = false
 		m.positionOfAtSymbol = -1
@@ -260,20 +301,8 @@ func (m *Model) handleSelectingAtChannelMember() tea.Cmd {
 	return nil
 }
 
-// func userNameInMsgHighlighter(msg string) string {
-// 	if len(msg) == 0 {
-// 		return msg
-// 	}
-// 	str := strings.Split(msg, " ")
-// 	for _, v := range str {
-// 		word := []rune(v)
-// 		if len(word) > 0 && string(word[0]) == "@" {
-// 			// isUserInChannel := doesUserExistInChannel()
-// 		}
-// 	}
-// 	return ""
-// }
-
+// It contains all the key press events and the update events to perform after them.
+// It will update the UI as according to the key pressed.
 func (m *Model) handleUpdateOnKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
 	case key.Matches(msg, m.keys.ChannelListNextChannel):
@@ -339,8 +368,21 @@ func (m *Model) handleUpdateOnKeyPress(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		var cmd tea.Cmd
 		m.textInput, cmd = m.textInput.Update(msg)
 		channelMembersCmnd := m.handleShowingChannelMembersList()
-		m, slashCmnd := m.handleShowingAndFilteringSlashCommandList()
+		m, slashCmnd := m.handleShowingSlashCommandList()
 		return m, tea.Batch(cmd, slashCmnd, channelMembersCmnd)
 	}
 	return m, nil
+}
+
+// To search any user while mentioning them in room.
+func (m *Model) handleSearchUser(query string) ([]models.SearchUsers, error) {
+	resp, err := m.restClient.SearchUsersOrRooms(query)
+	b, _ := json.Marshal(resp)
+	log.Println(string(b))
+	if err != nil {
+		log.Println(err, resp)
+		return nil, err
+	}
+	users := resp.Users
+	return users, nil
 }
