@@ -26,7 +26,7 @@ var (
 	PaginationStyle                   = list.DefaultStyles().PaginationStyle
 	HelpStyle                         = list.DefaultStyles().HelpStyle.PaddingBottom(1)
 	SmallListBoxStyle                 = lipgloss.NewStyle().Border(lipgloss.NormalBorder(), true, true, false, true).BorderForeground(lipgloss.Color("#119da4")).Align(lipgloss.Left)
-	LoginScreenWelcomeTextStyle       = lipgloss.NewStyle().Width(46).Align(lipgloss.Center).Foreground(lipgloss.Color("#767373")).MarginTop(1)
+	LoginScreenWelcomeTextStyle       = lipgloss.NewStyle().Width(46).Align(lipgloss.Center).Foreground(lipgloss.Color("#767373"))
 	LoginHeadingTextStyle             = lipgloss.NewStyle().Width(46).Align(lipgloss.Center).Foreground(lipgloss.Color("#cbcbcb")).MarginTop(1).Bold(true).Underline(true)
 	EmailInputLabelStyle              = lipgloss.NewStyle().Width(46).Align(lipgloss.Left).MarginTop(2).Foreground(lipgloss.Color("#cbcbcb")).Bold(true)
 	PasswordInputLabelStyle           = lipgloss.NewStyle().Width(46).Align(lipgloss.Left).MarginTop(1).Foreground(lipgloss.Color("#cbcbcb")).Bold(true)
@@ -34,6 +34,9 @@ var (
 	LoginScreenInputBoxNotActiveStyle = lipgloss.NewStyle().Width(46).Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#767373")).Foreground(lipgloss.Color("#ffffff")).Align(lipgloss.Left)
 	LoginButtonNotActiveStyle         = lipgloss.NewStyle().Width(48).Background(lipgloss.Color("#119da4")).Foreground(lipgloss.Color("#ffffff")).Align(lipgloss.Center).Padding(1, 2).MarginBottom(1).MarginTop(2)
 	LoginButtonActiveStyle            = lipgloss.NewStyle().Width(48).Background(lipgloss.Color("#00686D")).Foreground(lipgloss.Color("#ffffff")).Align(lipgloss.Center).Padding(1, 2).MarginBottom(1).MarginTop(2)
+	LoginErrorBoxHeadingStyle         = LoginScreenWelcomeTextStyle.Copy().Blink(true).Underline(true).Foreground(lipgloss.Color("#c04000"))
+	LoginErrorBoxTextStyle            = LoginScreenWelcomeTextStyle.Copy().UnsetAlign().MaxWidth(45).Foreground(lipgloss.Color("#ffffff"))
+	LoginErrorBoxStyle                = lipgloss.NewStyle().Align(lipgloss.Center).BorderStyle(lipgloss.ThickBorder()).BorderForeground(lipgloss.Color("#c04000")).Width(50).MaxWidth(52).MarginBottom(1)
 	LoginUiBoxStyle                   = lipgloss.NewStyle().Align(lipgloss.Center).BorderStyle(lipgloss.ThickBorder()).BorderForeground(lipgloss.Color("#119da4")).Height(15).Width(50)
 	ChannelMembersListUsernameStyle   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#e5e4e2"))
 	ChannelMembersListNameStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("#e5e4e2"))

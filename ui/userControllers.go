@@ -126,6 +126,7 @@ func (m *Model) userLoginBegin() tea.Cmd {
 			cache.CreateUpdateCacheEntry("tokenExpires", "")
 			m.loginScreen.loginScreenState = "showLoginScreen"
 			m.loginScreen.loggedIn = false
+			m.loginScreen.err = err
 			return nil
 		}
 		channelCmd := m.setChannelsInUiList()
@@ -140,6 +141,7 @@ func (m *Model) userLoginBegin() tea.Cmd {
 		cache.CreateUpdateCacheEntry("tokenExpires", "")
 		m.loginScreen.loginScreenState = "showLoginScreen"
 		m.loginScreen.loggedIn = false
+		m.loginScreen.err = generateError("token expired, Please login again")
 		return nil
 	}
 
@@ -148,27 +150,26 @@ func (m *Model) userLoginBegin() tea.Cmd {
 // It handles the updatation of login screen
 // Key bindings for login screen are handled
 // After login all other details like channels, available slash commands and channel members are fetched.
-func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
+func (m *Model) handleLoginScreenUpdate(msg tea.Msg) (tea.Cmd, error) {
 	if !m.loginScreen.loggedIn && m.loginScreen.loginScreenState == "showLoginScreen" {
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			switch msg.String() {
 			case "ctrl+c":
-				return tea.Quit
+				return tea.Quit, nil
 			case "tab", "ctrl+down":
 				if m.loginScreen.activeElement < 3 {
 					m.loginScreen.activeElement = m.loginScreen.activeElement + 1
 				} else {
 					m.loginScreen.activeElement = 1
 				}
-				return nil
+				return nil, nil
 			case "enter":
-				m.loginScreen.activeElement = 3
 				if m.email != "" && m.password != "" {
 					err := m.connectFromEmailAndPassword()
 					if err != nil {
 						log.Println("Error occurred while login from email", err)
-						panic(err)
+						return nil, err
 					}
 					var cmds []tea.Cmd
 					channelCmd := m.setChannelsInUiList()
@@ -179,8 +180,10 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 					setSlashCommandsList := m.setSlashCommandsList()
 					channelMembersSetCmnd := m.setChannelMembersList()
 					cmds = append(cmds, channelCmd, textinput.Blink, setSlashCommandsList, channelMembersSetCmnd, cmd)
-					return tea.Batch(cmds...)
+					return tea.Batch(cmds...), nil
 				}
+				err := generateError("Please enter email and password")
+				return nil, err
 			}
 		}
 
@@ -188,17 +191,17 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 			var cmd tea.Cmd
 			m.loginScreen.emailInput, cmd = m.loginScreen.emailInput.Update(msg)
 			m.email = m.loginScreen.emailInput.Value()
-			return cmd
+			return cmd, nil
 		}
 
 		if m.loginScreen.activeElement == 2 {
 			var cmd tea.Cmd
 			m.loginScreen.passwordInput, cmd = m.loginScreen.passwordInput.Update(msg)
 			m.password = m.loginScreen.passwordInput.Value()
-			return cmd
+			return cmd, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // Handle user logout and restoration of the TUI state to the intial state once user is logged out

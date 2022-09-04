@@ -70,6 +70,7 @@ type LoginScreen struct {
 	loginScreenState string
 	loggedIn         bool
 	clickLoginButton bool
+	err              error
 }
 
 // It will generate the initial global model state for the TUI.
@@ -102,6 +103,7 @@ func IntialModelState(sUrl string) *Model {
 		loggedIn:         false,
 		loginScreenState: "showLoginScreen",
 		clickLoginButton: false,
+		err:              nil,
 	}
 
 	// Message text input component for TUI
@@ -195,9 +197,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var channelCmd, messageCmd, slashCmd, channelMembersListCmnd tea.Cmd
 
-	loginScreenUpdateCmd := m.handleLoginScreenUpdate(msg)
+	loginScreenUpdateCmd, err := m.handleLoginScreenUpdate(msg)
 	if loginScreenUpdateCmd != nil {
 		return m, loginScreenUpdateCmd
+	} else if err != nil {
+		m.loginScreen.err = err
+		return m, nil
 	}
 
 	switch msg := msg.(type) {

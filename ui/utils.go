@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -52,4 +53,8 @@ func doesUserExistInChannel(channelMembers []models.User, username string) int {
 		}
 	}
 	return -1
+}
+
+func generateError(errorString string) error {
+	return errors.New(errorString)
 }

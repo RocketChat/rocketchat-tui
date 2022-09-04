@@ -101,6 +101,12 @@ func (m *Model) RenderTui() string {
 }
 
 func (m *Model) RenderLoginScreen() string {
+	var loginErrorBox string
+	if m.loginScreen.err != nil {
+		loginErrorBoxHeading := styles.LoginErrorBoxHeadingStyle.Render("⚠ ERROR")
+		loginErrorText := styles.LoginErrorBoxTextStyle.Render(m.loginScreen.err.Error())
+		loginErrorBox = styles.LoginErrorBoxStyle.Render(lipgloss.JoinVertical(lipgloss.Center, loginErrorBoxHeading, loginErrorText))
+	}
 	loginScreenWelcomeText := styles.LoginScreenWelcomeTextStyle.Render("WELCOME TO ROCKET.CHAT")
 	loginHeadingText := styles.LoginHeadingTextStyle.Render("Login into your Account")
 
@@ -128,6 +134,6 @@ func (m *Model) RenderLoginScreen() string {
 	}
 
 	loginUiBox := styles.LoginUiBoxStyle.Render(lipgloss.JoinVertical(lipgloss.Top, loginScreenWelcomeText, loginHeadingText, emailInputLabel, emailInputBox, passowrdInputLabel, passowrdInputBox, loginButton))
-
-	return loginUiBox
+	loginScreen := lipgloss.JoinVertical(lipgloss.Top, loginErrorBox, loginUiBox)
+	return loginScreen
 }
