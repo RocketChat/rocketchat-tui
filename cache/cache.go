@@ -10,6 +10,7 @@ import (
 var cacheBucket = []byte("cache")
 var cache *bolt.DB
 
+// To intialise the cache db.
 func CacheInit() error {
 	var err error
 	cache, err = bolt.Open("cache.db", 0600, &bolt.Options{Timeout: 1 * time.Second})
@@ -23,6 +24,7 @@ func CacheInit() error {
 	})
 }
 
+// To create and update entry in the cache.
 func CreateUpdateCacheEntry(name string, value string) error {
 	err := cache.Update(func(tx *bolt.Tx) error {
 		b := tx.Bucket(cacheBucket)
@@ -35,6 +37,7 @@ func CreateUpdateCacheEntry(name string, value string) error {
 	return nil
 }
 
+// To get entry from the cache
 func GetCacheEntry(name string) (string, error) {
 	var value string
 	err := cache.View(func(tx *bolt.Tx) error {

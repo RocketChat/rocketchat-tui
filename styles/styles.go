@@ -5,6 +5,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// It contain all the styling of the TUI
 var (
 	NameLetterBoxStyle                = lipgloss.NewStyle().Align(lipgloss.Center).Height(1).Width(1).PaddingLeft(1).PaddingRight(1)
 	SidebarTopColumnStyle             = lipgloss.NewStyle()

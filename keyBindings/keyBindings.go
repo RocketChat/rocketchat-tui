@@ -2,6 +2,7 @@ package keyBindings
 
 import "github.com/charmbracelet/bubbles/key"
 
+// All the key bindings required for performing different actions in the TUI.
 type ListKeyMap struct {
 	MessageListNextPage              key.Binding
 	MessageListPreviousPage          key.Binding
@@ -17,6 +18,7 @@ type ListKeyMap struct {
 	LogOutTui                        key.Binding
 }
 
+// For binding keyboard keys with the appropriate key bindings.
 func NewListKeyMap() *ListKeyMap {
 	return &ListKeyMap{
 		MessageListNextPage: key.NewBinding(

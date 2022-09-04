@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// It calls the Realtime API function used to send message in the TUI.
 func (m *Model) sendMessage(text string) {
 	if text != "" {
 		channelId := m.activeChannel.RoomId
@@ -18,6 +19,7 @@ func (m *Model) sendMessage(text string) {
 	}
 }
 
+// It calls the Realtime API function to load past message history of a room when the TUI first rendered.
 func (m *Model) loadHistory() {
 	channelId := m.activeChannel.RoomId
 
@@ -39,6 +41,9 @@ func (m *Model) loadHistory() {
 	m.lastMessageTimestamp = messages[0].Timestamp
 }
 
+// It calls the REST API function to fetch more past messages of a romm.
+// It is called when user want to load more past message.
+// It calls the appropriate API according to the type of channel from public (channel), private (group) and DM
 func (m *Model) fetchPastMessages() tea.Cmd {
 	page := &models.Pagination{
 		Count:  20,
@@ -98,6 +103,9 @@ func (m *Model) fetchPastMessages() tea.Cmd {
 	return msgsCommand
 }
 
+// It is used for the realtime updation of chat messages in the TUI.
+// It return a 'tea.Cmd' which is a function which returns 'tea.Msg' as it triggers the Update function.
+// The 'tea.Msg' here returned will be of type models.Message which is catched in TUI Update function and hence TUI is updated with new message.
 func (m *Model) waitForIncomingMessage(msgChannel chan models.Message) tea.Cmd {
 	return func() tea.Msg {
 		message := <-msgChannel
@@ -109,14 +117,13 @@ func (m *Model) waitForIncomingMessage(msgChannel chan models.Message) tea.Cmd {
 	}
 }
 
-func (m *Model) handleMessageSending() (tea.Model, tea.Cmd) {
+// It is used for handling sending of message from the TUI and check message before sending.
+func (m *Model) handleMessageSending() {
 	msg := strings.TrimSpace(m.textInput.Value())
 	if msg != "" {
 		m.sendMessage(msg)
 		m.textInput.Reset()
-		return m, nil
-	} else {
-		m.textInput.Reset()
-		return m, nil
+		return
 	}
+	m.textInput.Reset()
 }

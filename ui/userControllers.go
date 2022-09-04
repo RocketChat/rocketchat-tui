@@ -13,6 +13,11 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// It is used to login using email and password to rest and realtime api client throw err if not able to login.
+// After successfull login rest and realtime client is set into state, to be used in all other apis call using them.
+// User token and token expiration date is added in cache database to use them for future login.
+// LoginScreen state is changed and terminal will show TUI.
+// All subscribed channels, groups and DMs are fetched.
 func (m *Model) connectFromEmailAndPassword() error {
 
 	sUrl := m.serverUrl
@@ -53,6 +58,10 @@ func (m *Model) connectFromEmailAndPassword() error {
 	return nil
 }
 
+// It is used to login using token stored in cache database.
+// After successfull login rest and realtime client is set into state, to be used in all other apis call using them.
+// LoginScreen state is changed and terminal will show TUI.
+// All subscribed channels, groups and DMs are fetched.
 func (m *Model) connectFromToken() error {
 
 	sUrl := m.serverUrl
@@ -88,6 +97,9 @@ func (m *Model) connectFromToken() error {
 	return nil
 }
 
+// Initiate the login workflow, verify validation and expiration of token from cache
+// If token is valid login is perform using it else user redirected to login using email and password
+// After login all other details like channels, available slash commands and channel members are fetched.
 func (m *Model) userLoginBegin() tea.Cmd {
 	token, err := cache.GetCacheEntry("token")
 	if err != nil {
@@ -119,8 +131,8 @@ func (m *Model) userLoginBegin() tea.Cmd {
 		channelCmd := m.setChannelsInUiList()
 		m.typing = true
 		m.changeSelectedChannel(0)
-		setSlashCommandsList := m.fetchAllSlashCommands()
-		channelMembersSetCmnd := m.getChannelMembers()
+		setSlashCommandsList := m.setSlashCommandsList()
+		channelMembersSetCmnd := m.setChannelMembersList()
 		return tea.Batch(channelCmd, setSlashCommandsList, channelMembersSetCmnd)
 
 	} else {
@@ -133,6 +145,9 @@ func (m *Model) userLoginBegin() tea.Cmd {
 
 }
 
+// It handles the updatation of login screen
+// Key bindings for login screen are handled
+// After login all other details like channels, available slash commands and channel members are fetched.
 func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 	if !m.loginScreen.loggedIn && m.loginScreen.loginScreenState == "showLoginScreen" {
 		switch msg := msg.(type) {
@@ -161,8 +176,8 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 					m.loginScreen.loggedIn = true
 					m.changeSelectedChannel(0)
 					m.typing = true
-					setSlashCommandsList := m.fetchAllSlashCommands()
-					channelMembersSetCmnd := m.getChannelMembers()
+					setSlashCommandsList := m.setSlashCommandsList()
+					channelMembersSetCmnd := m.setChannelMembersList()
 					cmds = append(cmds, channelCmd, textinput.Blink, setSlashCommandsList, channelMembersSetCmnd, cmd)
 					return tea.Batch(cmds...)
 				}
@@ -186,16 +201,13 @@ func (m *Model) handleLoginScreenUpdate(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
+// Handle user logout and restoration of the TUI state to the intial state once user is logged out
+// Clear user token and its expiration date from cache
 func (m *Model) handleUserLogOut() (tea.Model, tea.Cmd) {
 	sUrl := m.serverUrl
-	m = IntialModelState(sUrl)
 	m.loginScreen.passwordInput.Reset()
 	m.loginScreen.emailInput.Reset()
-	m.email = ""
-	m.password = ""
-	m.token = ""
-	m.loginScreen.loginScreenState = "showLoginScreen"
-	m.loginScreen.loggedIn = false
+	m = IntialModelState(sUrl)
 	cache.CreateUpdateCacheEntry("token", "")
 	cache.CreateUpdateCacheEntry("tokenExpires", "")
 	return m, nil

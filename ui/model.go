@@ -21,6 +21,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// All Bubble tea required core functions like Init, Update and View will be method of this.
+// It defines the Global State of the TUI.
 type Model struct {
 	textInput textinput.Model
 	keys      *keyBindings.ListKeyMap
@@ -60,6 +62,7 @@ type Model struct {
 	height             int
 }
 
+// It cantains the state for the Loginscreen.
 type LoginScreen struct {
 	emailInput       textinput.Model
 	passwordInput    textinput.Model
@@ -69,22 +72,29 @@ type LoginScreen struct {
 	clickLoginButton bool
 }
 
+// It will generate the initial global model state for the TUI.
 func IntialModelState(sUrl string) *Model {
+	// To get the width and height of initial terminal screen.
 	w, h, err := term.GetSize(0)
 	if err != nil {
 		return nil
 	}
 
+	// Email text input component for Loginscreen.
 	e := textinput.NewModel()
 	e.Placeholder = "Enter your email"
+	e.Width = 42
 	e.Focus()
 
+	// Password text input component for Loginscreen.. In Echomode we can hide the text typing.
 	p := textinput.NewModel()
 	p.Placeholder = "Enter your password"
+	p.Width = 42
 	p.EchoMode = textinput.EchoPassword
 	p.EchoCharacter = '•'
 	p.Focus()
 
+	// Inital login scrfeen state.
 	intialLoginScreen := &LoginScreen{
 		emailInput:       e,
 		passwordInput:    p,
@@ -94,23 +104,29 @@ func IntialModelState(sUrl string) *Model {
 		clickLoginButton: false,
 	}
 
+	// Message text input component for TUI
 	t := textinput.NewModel()
 	t.Placeholder = "Message"
 	t.Focus()
 
+	// List component of bubble tea for holding channels list.
 	items := []list.Item{}
 	listKeys := keyBindings.NewListKeyMap()
-	cl := list.New(items, ChannelListDelegate{}, w/4-1, 14)
 
+	channelListDelegate := ChannelListDelegate{}
 	msgListDelegate := MessageListDelegate{}
 	slashCmndsListDelegate := SlashCommandsListDelegate{}
 	channelMembersListDelegate := ChannelMembersListDelegate{}
-	listDelegates := []ListDelegate{msgListDelegate, slashCmndsListDelegate, channelMembersListDelegate}
 
-	msgsList := list.New(items, listDelegates[0], 3*w/4-10, 16)
-	slashCmndsList := list.New(items, listDelegates[1], 3*w/4-10, 5)
-	channelMembersList := list.New(items, listDelegates[2], 3*w/4-10, 5)
+	// All lists will contain Height, Spacing, Render and Update function. All lists will be of type 'ListDelegate'
+	listDelegates := []ListDelegate{channelListDelegate, msgListDelegate, slashCmndsListDelegate, channelMembersListDelegate}
 
+	cl := list.New(items, listDelegates[0], w/4-1, 14)
+	msgsList := list.New(items, listDelegates[1], 3*w/4-10, 16)
+	slashCmndsList := list.New(items, listDelegates[2], 3*w/4-10, 5)
+	channelMembersList := list.New(items, listDelegates[3], 3*w/4-10, 5)
+
+	// Adding key bindings to the lists.
 	cl.AdditionalFullHelpKeys = func() []key.Binding {
 		return []key.Binding{
 			listKeys.ChannelListNextChannel,
@@ -139,6 +155,7 @@ func IntialModelState(sUrl string) *Model {
 		}
 	}
 
+	// Initial global model state.
 	initialModel := &Model{
 		channelList:            cl,
 		keys:                   listKeys,
@@ -161,6 +178,7 @@ func IntialModelState(sUrl string) *Model {
 	return initialModel
 }
 
+// This the function which will initialise the TUI. All init functions should be called in it.
 func (m *Model) Init() tea.Cmd {
 	err := cache.CacheInit()
 	if err != nil {
@@ -171,6 +189,8 @@ func (m *Model) Init() tea.Cmd {
 	return tea.Batch(m.userLoginBegin(), m.waitForIncomingMessage(m.msgChannel))
 }
 
+// This is the Main Update function which updates the TUI.
+// All other update functions to update state and TUI are called in it.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 	var channelCmd, messageCmd, slashCmd, channelMembersListCmnd tea.Cmd
@@ -195,6 +215,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
 		m.width = msg.Width
+		m.textInput.Width = (3 * m.width / 4) - 10
 		return m, nil
 	}
 
@@ -207,6 +228,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// This renders the UI of the TUI.
 func (m *Model) View() string {
 
 	var completeUi string
