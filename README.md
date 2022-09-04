@@ -22,8 +22,9 @@ Prerequisites:
 - Now in the RocketChat TUI root folder run `go run main.go -debug` to run the TUI.
 - We have to pass `-debug` flag so that it logs log statements in `debug.log` file.
 - To use production server pass `-prod` flag too while running `main.go`. It will use the production server.
+- To use any other server pass `-url` flag too while running `main.go` i.e. `go run main.go -url=https://open.rocket.chat`. It will use the given server.
 - Hopefully you will see the TUI running.
-- Enter your email and password. Press Enter.
+- Enter your email and password. Press Enter to login.
 
 ## Structure of the Project
 - The starting file of the project is `main.go`. It starts the bubbletea Program to run TUI.
