@@ -1,0 +1,6 @@
+.env
+logs.txt
+data.json
+cache.db
+debug.log
+/Rocket.Chat.Go.SDK
